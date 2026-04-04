@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { HashRouter, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Write from './pages/Write'
 import Archive from './pages/Archive'
@@ -7,7 +7,7 @@ import Stats from './pages/Stats'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <div className="dark min-h-full" style={{ fontFamily: '"Noto Serif KR", serif' }}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -17,6 +17,6 @@ export default function App() {
           <Route path="/stats" element={<Stats />} />
         </Routes>
       </div>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
