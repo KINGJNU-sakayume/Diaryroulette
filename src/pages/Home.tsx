@@ -42,7 +42,7 @@ export default function Home() {
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Nav */}
       <nav
-        className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 border-b"
+        className="safe-top sticky top-0 z-10 flex items-center justify-between px-6 py-3 border-b"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
         <div className="flex items-center gap-2">

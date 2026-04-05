@@ -15,6 +15,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
+
+    // Keep the status bar colour in sync with the app theme
+    const meta = document.getElementById('theme-color-meta') as HTMLMetaElement | null
+    if (meta) {
+      meta.content = theme === 'dark' ? '#0d1117' : '#FFFDF8'
+    }
   }, [theme])
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))

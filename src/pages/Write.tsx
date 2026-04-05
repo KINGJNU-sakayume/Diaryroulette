@@ -208,7 +208,7 @@ export default function Write() {
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
       <div
-        className="sticky top-0 z-50 border-b px-4 py-3 flex items-center justify-between gap-4"
+        className="safe-top sticky top-0 z-50 border-b px-4 py-3 flex items-center justify-between gap-4"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
         <div className="flex items-center gap-3 min-w-0">

@@ -2,9 +2,26 @@
 <html lang="ko" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0d1117" />
+
+    <!-- Viewport: viewport-fit=cover lets content extend behind Dynamic Island -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+
+    <!-- PWA theme color — dark default; JS updates this on theme toggle -->
+    <meta name="theme-color" content="#0d1117" id="theme-color-meta" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- black-translucent: content fills behind Dynamic Island / status bar -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="일기 룰렛" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/Diaryroulette/favicon.svg" />
+    <link rel="apple-touch-icon" href="/Diaryroulette/apple-touch-icon.png" />
+
     <title>일기 룰렛</title>
   </head>
   <body>
