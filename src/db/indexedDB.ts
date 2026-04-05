@@ -131,3 +131,14 @@ export async function getJournalsByStatus(
 export async function deleteJournal(id: string): Promise<void> {
   await tx<undefined>('journals', 'readwrite', (s) => s.delete(id))
 }
+
+export async function clearAllData(): Promise<void> {
+  const db = await getDB()
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['missions', 'journals'], 'readwrite')
+    transaction.objectStore('missions').clear()
+    transaction.objectStore('journals').clear()
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+  })
+}

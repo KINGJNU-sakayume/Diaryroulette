@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { RotateCw, BookOpen, Archive, BarChart2, FileText } from 'lucide-react'
-import RouletteWheel from '../components/Roulette/RouletteWheel'
+import SlotMachinePicker from '../components/SlotMachine/SlotMachinePicker'
+import { missions } from '../data/missions'
 import MissionCard from '../components/Roulette/MissionCard'
 import { useTodayMission } from '../hooks/useTodayMission'
-import { missions } from '../data/missions'
 import { getJournalsByStatus } from '../db/indexedDB'
 
 export default function Home() {
@@ -28,7 +28,6 @@ export default function Home() {
   }, [])
 
   const targetMissionId = todayRecord?.missionId ?? null
-  const targetIdx = targetMissionId ? missions.findIndex((m) => m.id === targetMissionId) : -1
 
   if (loading) {
     return (
@@ -81,11 +80,10 @@ export default function Home() {
 
         {/* Roulette wheel */}
         <div className="flex flex-col items-center gap-6">
-          <RouletteWheel
+          <SlotMachinePicker
             targetMissionId={targetMissionId}
             isSpinning={isSpinning}
             onSpinComplete={handleSpinComplete}
-            initialRotation={targetIdx >= 0 ? -(targetIdx * 10) - 5 + 5 * 360 : 0}
           />
 
           {!todayRecord && !isSpinning && (
