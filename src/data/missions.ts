@@ -301,6 +301,18 @@ export const CATEGORY_COLORS: Record<MissionCategory, { bg: string; text: string
   creative: { bg: '#65a30d', text: '#bef264', border: '#4d7c0f' },
 }
 
+const CATEGORY_COLORS_LIGHT: Record<MissionCategory, { bg: string; text: string; border: string }> = {
+  lang:     { bg: '#7c3aed', text: '#5b21b6', border: '#5b21b6' },
+  view:     { bg: '#0891b2', text: '#0e7490', border: '#0e7490' },
+  time:     { bg: '#d97706', text: '#b45309', border: '#b45309' },
+  visual:   { bg: '#db2777', text: '#9d174d', border: '#9d174d' },
+  creative: { bg: '#65a30d', text: '#4d7c0f', border: '#4d7c0f' },
+}
+
+export function getCategoryColors(theme: 'light' | 'dark') {
+  return theme === 'light' ? CATEGORY_COLORS_LIGHT : CATEGORY_COLORS
+}
+
 export const CATEGORY_LABELS: Record<MissionCategory, string> = {
   lang:     '언어',
   view:     '시점',
