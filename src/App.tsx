@@ -1,26 +1,41 @@
 import { HashRouter, Routes, Route } from 'react-router-dom'
-import Home from './pages/Home'
-import Write from './pages/Write'
-import Archive from './pages/Archive'
-import Drafts from './pages/Drafts'
-import Stats from './pages/Stats'
-import DevReviewPanel from './components/DevReviewPanel/DevReviewPanel'
 import { ThemeProvider } from './contexts/ThemeContext'
+import Layout from './components/shared/Layout'
+import Home    from './pages/Home'
+import Write   from './pages/Write'
+import Archive from './pages/Archive'
+import Drafts  from './pages/Drafts'
+import Stats   from './pages/Stats'
+import DevReviewPanel from './components/DevReviewPanel/DevReviewPanel'
 
 export default function App() {
   return (
     <ThemeProvider>
       <HashRouter>
-        <div className="min-h-full" style={{ fontFamily: '"Noto Serif KR", serif' }}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/write" element={<Write />} />
-            <Route path="/archive" element={<Archive />} />
-            <Route path="/drafts" element={<Drafts />} />
-            <Route path="/stats" element={<Stats />} />
-          </Routes>
-          <DevReviewPanel />
-        </div>
+        <Routes>
+          <Route path="/" element={
+            <Layout>
+              <Home />
+            </Layout>
+          } />
+          <Route path="/write" element={<Write />} />
+          <Route path="/archive" element={
+            <Layout>
+              <Archive />
+            </Layout>
+          } />
+          <Route path="/drafts" element={
+            <Layout>
+              <Drafts />
+            </Layout>
+          } />
+          <Route path="/stats" element={
+            <Layout>
+              <Stats />
+            </Layout>
+          } />
+        </Routes>
+        <DevReviewPanel />
       </HashRouter>
     </ThemeProvider>
   )

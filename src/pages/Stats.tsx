@@ -1,20 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
-import BottomTabBar from '../components/shared/BottomTabBar'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { useCooldown } from '../hooks/useCooldown'
 import { missions, CATEGORY_COLORS, CATEGORY_LABELS, type MissionCategory } from '../data/missions'
 import { exportToJSON } from '../utils/exportData'
 import { validateExportData, importFromJSON } from '../utils/importData'
 import type { ExportData } from '../utils/exportData'
-import { useTheme } from '../contexts/ThemeContext'
 
 export default function Stats() {
   const [journals, setJournals] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const { getActiveCooldowns, loading: cooldownLoading } = useCooldown()
-  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     getAllJournals()
@@ -50,36 +45,8 @@ export default function Stats() {
   const activeCooldowns = getActiveCooldowns()
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-      {/* Header */}
-      <div
-        className="safe-top sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
-        style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
-      >
-        <Link to="/" className="hidden md:flex p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-lg font-bold font-serif" style={{ color: 'var(--color-text)' }}>통계</h1>
-        <div className="ml-auto">
-          <button
-            onClick={toggleTheme}
-            style={{
-              background: 'var(--color-card)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-muted)',
-              borderRadius: '8px',
-              padding: '6px 10px',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-            title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6 pb-tab-bar">
+    <div>
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         {/* Donut chart */}
         <Section title="카테고리별 완료">
           <DonutChart categoryCount={categoryCount} total={completedCount} />
@@ -179,7 +146,6 @@ export default function Stats() {
           <DataManagement />
         </Section>
       </div>
-      <BottomTabBar />
     </div>
   )
 }
