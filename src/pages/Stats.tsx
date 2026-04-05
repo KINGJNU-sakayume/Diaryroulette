@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { useCooldown } from '../hooks/useCooldown'
 import { missions, CATEGORY_COLORS, CATEGORY_LABELS, type MissionCategory } from '../data/missions'
+import { exportToJSON } from '../utils/exportData'
+import { validateExportData, importFromJSON } from '../utils/importData'
+import type { ExportData } from '../utils/exportData'
 
 export default function Stats() {
   const [journals, setJournals] = useState<JournalEntry[]>([])
@@ -122,7 +125,176 @@ export default function Stats() {
             </div>
           </Section>
         )}
+
+        {/* Data Management */}
+        <Section title="데이터 관리 / Data Management">
+          <DataManagement />
+        </Section>
       </div>
+    </div>
+  )
+}
+
+// ─── Data Management ──────────────────────────────────────────────────────────
+
+function DataManagement() {
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [pendingData, setPendingData] = useState<ExportData | null>(null)
+  const [importWarning, setImportWarning] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function showToast(msg: string, ok: boolean) {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  async function handleExport() {
+    try {
+      await exportToJSON()
+      showToast('내보내기 완료 ✅', true)
+    } catch (e) {
+      showToast(`내보내기 실패: ${e}`, false)
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = event.target?.result as string
+      let raw: unknown
+      try {
+        raw = JSON.parse(text)
+      } catch {
+        showToast('올바른 JSON 파일이 아닙니다.', false)
+        return
+      }
+
+      const result = validateExportData(raw)
+      if (!result.valid || !result.data) {
+        showToast('올바른 JSON 파일이 아닙니다.', false)
+        return
+      }
+
+      setPendingData(result.data)
+      setImportWarning(result.warning ?? null)
+      setShowConfirm(true)
+    }
+    reader.readAsText(file)
+  }
+
+  async function handleConfirmImport() {
+    if (!pendingData) return
+    setShowConfirm(false)
+    try {
+      await importFromJSON(pendingData)
+      showToast('가져오기 완료 ✅', true)
+      setTimeout(() => window.location.reload(), 1200)
+    } catch (e) {
+      showToast(`가져오기 실패: ${e}`, false)
+    }
+    setPendingData(null)
+    setImportWarning(null)
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500">
+        캔버스 항목이 많으면 백업 파일이 클 수 있습니다. JSON 파일에는 모든 일기와 미션 기록이 포함됩니다.
+      </p>
+
+      <div className="flex gap-3 flex-wrap">
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80 active:scale-95"
+          style={{ background: '#21262d', border: '1px solid #30363d', color: '#e6edf3' }}
+        >
+          📤 Export JSON
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80 active:scale-95"
+          style={{ background: '#21262d', border: '1px solid #30363d', color: '#e6edf3' }}
+        >
+          📥 Import JSON
+        </button>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
+      {/* Confirmation modal */}
+      {showConfirm && pendingData && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+        >
+          <div
+            className="rounded-2xl border p-6 max-w-sm w-full space-y-4"
+            style={{ background: '#161b22', borderColor: '#30363d' }}
+          >
+            <h3 className="text-base font-bold text-white">데이터 가져오기</h3>
+            {importWarning && (
+              <p className="text-xs text-amber-400 bg-amber-400/10 rounded-lg px-3 py-2">
+                ⚠️ {importWarning}
+              </p>
+            )}
+            <p className="text-sm text-slate-400">
+              이 작업은 현재 데이터를 모두 덮어씁니다. 계속하시겠습니까?
+            </p>
+            <p className="text-xs text-slate-500">
+              This will overwrite all current data. Continue?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowConfirm(false); setPendingData(null) }}
+                className="flex-1 py-2 rounded-lg text-sm font-medium"
+                style={{ background: '#21262d', border: '1px solid #30363d', color: '#8b949e' }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                className="flex-1 py-2 rounded-lg text-sm font-medium"
+                style={{ background: '#7c3aed', color: '#fff' }}
+              >
+                가져오기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className="rounded-lg px-4 py-2 text-sm font-medium"
+          style={{
+            background: toast.ok ? '#1a2e1a' : '#2e1a1a',
+            border: `1px solid ${toast.ok ? '#2ea043' : '#da3633'}`,
+            color: toast.ok ? '#3fb950' : '#f85149',
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
     </div>
   )
 }

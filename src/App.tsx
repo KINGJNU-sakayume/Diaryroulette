@@ -4,6 +4,7 @@ import Write from './pages/Write'
 import Archive from './pages/Archive'
 import Drafts from './pages/Drafts'
 import Stats from './pages/Stats'
+import DevReviewPanel from './components/DevReviewPanel/DevReviewPanel'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/drafts" element={<Drafts />} />
           <Route path="/stats" element={<Stats />} />
         </Routes>
+        <DevReviewPanel />
       </div>
     </HashRouter>
   )
