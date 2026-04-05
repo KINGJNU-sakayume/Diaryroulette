@@ -277,21 +277,42 @@ export default function TextEditor({
     <div className="flex flex-col gap-3">
       {/* Hint banner for highlighted missions */}
       {needsHighlight && (
-        <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-800/40 rounded-lg px-3 py-2">
+        <div
+          className="text-xs rounded-lg px-3 py-2"
+          style={{
+            background: 'rgba(217, 119, 6, 0.15)',
+            border: '1px solid rgba(217, 119, 6, 0.5)',
+            color: 'var(--color-text)',
+          }}
+        >
           💡 참고용 힌트입니다 — 절대적 기준이 아닙니다
         </div>
       )}
 
       {/* Consonant order hint for time-5/lang-6 */}
       {(missionId === 'time-5' || missionId === 'lang-6') && (
-        <div className="text-xs text-blue-400 bg-blue-900/20 border border-blue-800/40 rounded-lg px-3 py-2">
+        <div
+          className="text-xs rounded-lg px-3 py-2"
+          style={{
+            background: 'rgba(59, 130, 246, 0.15)',
+            border: '1px solid rgba(59, 130, 246, 0.5)',
+            color: 'var(--color-text)',
+          }}
+        >
           다음 문장은 &apos;{nextConsonant}&apos;으로 시작해야 합니다
         </div>
       )}
 
       {/* Korean input warning for lang-7 */}
       {koreanWarning && (
-        <div className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2">
+        <div
+          className="text-xs rounded-lg px-3 py-2"
+          style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            color: 'var(--color-text)',
+          }}
+        >
           한국어는 사용할 수 없습니다 / Korean is not allowed
         </div>
       )}

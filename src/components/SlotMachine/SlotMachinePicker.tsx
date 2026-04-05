@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { missions, CATEGORY_COLORS } from '../../data/missions'
+import { missions, getCategoryColors } from '../../data/missions'
+import { useTheme } from '../../contexts/ThemeContext'
 
 const ROW_HEIGHT = 64
 const VISIBLE_ROWS = 5
@@ -36,6 +37,8 @@ export default function SlotMachinePicker({
   const [translateY, setTranslateY] = useState(0)
   const [phase, setPhase] = useState<'idle' | 'spinning' | 'done'>('idle')
   const [centeredIndex, setCenteredIndex] = useState<number>(-1) // drum index of centered item
+  const { theme } = useTheme()
+  const categoryColors = getCategoryColors(theme)
 
   const rafRef = useRef<number | null>(null)
   const startTimeRef = useRef<number | null>(null)
@@ -114,10 +117,10 @@ export default function SlotMachinePicker({
         width: 320,
         height: WINDOW_HEIGHT,
         overflow: 'hidden',
-        background: 'rgba(13,17,23,0.90)',
+        background: 'var(--color-bg-nav)',
         backdropFilter: 'blur(12px)',
         borderRadius: 16,
-        border: '1px solid #30363d',
+        border: '1px solid var(--color-border)',
       }}
     >
       {/* Left-edge tick marks (slot machine feel) */}
@@ -128,7 +131,7 @@ export default function SlotMachinePicker({
           top: 0,
           bottom: 0,
           width: 4,
-          background: '#21262d',
+          background: 'var(--color-card)',
           zIndex: 4,
         }}
       >
@@ -141,7 +144,7 @@ export default function SlotMachinePicker({
               left: 0,
               width: 8,
               height: 2,
-              background: i === CENTER_ROW ? '#58a6ff' : '#30363d',
+              background: i === CENTER_ROW ? '#58a6ff' : 'var(--color-border)',
             }}
           />
         ))}
@@ -171,7 +174,7 @@ export default function SlotMachinePicker({
           left: 0,
           right: 0,
           height: 112,
-          background: 'linear-gradient(to bottom, rgba(13,17,23,1) 0%, rgba(13,17,23,0) 100%)',
+          background: 'linear-gradient(to bottom, var(--color-bg), transparent)',
           zIndex: 3,
           pointerEvents: 'none',
         }}
@@ -184,7 +187,7 @@ export default function SlotMachinePicker({
           left: 0,
           right: 0,
           height: 112,
-          background: 'linear-gradient(to top, rgba(13,17,23,1) 0%, rgba(13,17,23,0) 100%)',
+          background: 'linear-gradient(to top, var(--color-bg), transparent)',
           zIndex: 3,
           pointerEvents: 'none',
         }}
@@ -199,7 +202,7 @@ export default function SlotMachinePicker({
       >
         {DRUM_ITEMS.map((mission, i) => {
           const isCenter = i === centeredIndex
-          const colors = CATEGORY_COLORS[mission.category]
+          const colors = categoryColors[mission.category]
           return (
             <div
               key={i}
@@ -234,7 +237,7 @@ export default function SlotMachinePicker({
                 style={{
                   fontSize: 13,
                   fontWeight: isCenter ? 600 : 400,
-                  color: isCenter ? '#e6edf3' : '#8b949e',
+                  color: isCenter ? 'var(--color-text)' : 'var(--color-muted)',
                   letterSpacing: '0.01em',
                   lineHeight: 1.3,
                   paddingLeft: 8,
