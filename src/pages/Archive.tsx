@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Flame, Image, Smile } from 'lucide-react'
+import BottomTabBar from '../components/shared/BottomTabBar'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
 import CategoryBadge from '../components/shared/CategoryBadge'
@@ -43,7 +44,7 @@ export default function Archive() {
         className="safe-top sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
-        <Link to="/" className="p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
+        <Link to="/" className="hidden md:flex p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h1 className="text-lg font-bold font-serif" style={{ color: 'var(--color-text)' }}>보관함</h1>
@@ -65,7 +66,7 @@ export default function Archive() {
         </button>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="max-w-2xl mx-auto px-4 py-6 pb-tab-bar">
         {journals.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>아직 완료된 일기가 없습니다.</p>
@@ -110,6 +111,8 @@ export default function Archive() {
           </div>
         )}
       </div>
+
+      <BottomTabBar />
 
       {/* Detail modal */}
       {modal && (

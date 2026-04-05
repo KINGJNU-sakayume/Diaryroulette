@@ -1,21 +1,16 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { RotateCw, BookOpen, Archive, BarChart2, FileText } from 'lucide-react'
+import { RotateCw, Archive, BarChart2, FileText } from 'lucide-react'
 import SlotMachinePicker from '../components/SlotMachine/SlotMachinePicker'
 import MissionCard from '../components/Roulette/MissionCard'
 import { useTodayMission } from '../hooks/useTodayMission'
-import { getJournalsByStatus } from '../db/indexedDB'
 import { useTheme } from '../contexts/ThemeContext'
+import BottomTabBar from '../components/shared/BottomTabBar'
 
 export default function Home() {
   const { todayRecord, mission, loading, drawMission } = useTodayMission()
   const [isSpinning, setIsSpinning] = useState(false)
-  const [completedCount, setCompletedCount] = useState(0)
   const { theme, toggleTheme } = useTheme()
-
-  useEffect(() => {
-    getJournalsByStatus('completed').then((list) => setCompletedCount(list.length))
-  }, [])
 
   const handleSpin = useCallback(async () => {
     if (isSpinning || todayRecord) return
@@ -42,35 +37,38 @@ export default function Home() {
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Nav */}
       <nav
-        className="safe-top sticky top-0 z-10 flex items-center justify-between px-6 py-3 border-b"
+        className="safe-top sticky top-0 z-30 flex items-center justify-between px-6 py-3 border-b"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xl font-bold font-serif" style={{ color: 'var(--color-text)' }}>일기 룰렛</span>
-        </div>
-        <div className="flex items-center gap-1">
+        {/* Brand */}
+        <span className="text-xl font-bold font-serif" style={{ color: 'var(--color-text)' }}>일기 룰렛</span>
+
+        {/* Desktop nav links — hidden on mobile */}
+        <div className="hidden md:flex items-center gap-1">
           <NavLink to="/archive" icon={<Archive className="w-4 h-4" />} label="보관함" />
-          <NavLink to="/drafts" icon={<FileText className="w-4 h-4" />} label="임시저장" />
-          <NavLink to="/stats" icon={<BarChart2 className="w-4 h-4" />} label="통계" />
-          <button
-            onClick={toggleTheme}
-            style={{
-              background: 'var(--color-card)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-muted)',
-              borderRadius: '8px',
-              padding: '6px 10px',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-            title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
+          <NavLink to="/drafts"  icon={<FileText className="w-4 h-4" />} label="임시저장" />
+          <NavLink to="/stats"   icon={<BarChart2 className="w-4 h-4" />} label="통계" />
         </div>
+
+        {/* Theme toggle — always visible */}
+        <button
+          onClick={toggleTheme}
+          style={{
+            background: 'var(--color-card)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-muted)',
+            borderRadius: '8px',
+            padding: '6px 10px',
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+          title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
       </nav>
 
-      <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col items-center gap-8">
+      <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col items-center gap-8 pb-tab-bar">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold font-serif mb-2" style={{ color: 'var(--color-text)' }}>
@@ -109,10 +107,6 @@ export default function Home() {
           )}
         </div>
 
-        <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-          총 {completedCount}회 완료
-        </p>
-
         {/* Mission card — shown after spin or if already drawn today */}
         {mission && todayRecord && !isSpinning && (
           <div className="w-full animate-fadeIn">
@@ -123,31 +117,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* Quick links */}
-        <div className="w-full grid grid-cols-3 gap-3">
-          <QuickCard
-            to="/archive"
-            icon={<Archive className="w-5 h-5" />}
-            label="보관함"
-            sub="완료한 일기"
-            color="#0891b2"
-          />
-          <QuickCard
-            to="/drafts"
-            icon={<BookOpen className="w-5 h-5" />}
-            label="임시저장"
-            sub="미완성 일기"
-            color="#d97706"
-          />
-          <QuickCard
-            to="/stats"
-            icon={<BarChart2 className="w-5 h-5" />}
-            label="통계"
-            sub="진행 현황"
-            color="#65a30d"
-          />
-        </div>
       </div>
+      <BottomTabBar />
     </div>
   )
 }
@@ -165,30 +136,3 @@ function NavLink({ to, icon, label }: { to: string; icon: React.ReactNode; label
   )
 }
 
-function QuickCard({
-  to,
-  icon,
-  label,
-  sub,
-  color,
-}: {
-  to: string
-  icon: React.ReactNode
-  label: string
-  sub: string
-  color: string
-}) {
-  return (
-    <Link
-      to={to}
-      className="flex flex-col items-center gap-2 p-4 rounded-xl border transition-all hover:border-opacity-60 hover:scale-105"
-      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color }}
-    >
-      {icon}
-      <div className="text-center">
-        <p className="text-xs font-bold" style={{ color: 'var(--color-text)' }}>{label}</p>
-        <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{sub}</p>
-      </div>
-    </Link>
-  )
-}
