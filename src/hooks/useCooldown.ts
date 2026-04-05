@@ -6,7 +6,7 @@ import {
   type CooldownEntry,
 } from '../db/indexedDB'
 
-const COOLDOWN_DAYS = 14
+const COOLDOWN_DAYS = 7
 
 function daysBetween(from: Date, to: Date): number {
   return (to.getTime() - from.getTime()) / 86_400_000

@@ -18,13 +18,6 @@ export function getLocalDateString(): string {
   return `${y}-${m}-${day}`
 }
 
-// ─── Deterministic index from date string ─────────────────────────────────────
-
-function deterministicIndex(dateStr: string, length: number): number {
-  const hash = dateStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-  return hash % length
-}
-
 // ─── Extra data builder (lang-3: pick random bannedVowel) ─────────────────────
 
 const KOREAN_VOWELS = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
@@ -64,8 +57,7 @@ export function useTodayMission() {
 
   const drawMission = useCallback(async (): Promise<TodayMissionRecord> => {
     const available = getAvailableMissions()
-    const idx = deterministicIndex(today, available.length)
-    const mission = available[idx]
+    const mission = available[Math.floor(Math.random() * available.length)]
     const extraData = buildExtraData(mission)
 
     const record: TodayMissionRecord = {
