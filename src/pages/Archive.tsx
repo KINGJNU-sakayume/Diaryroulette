@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Flame, Image, Smile } from 'lucide-react'
-import BottomTabBar from '../components/shared/BottomTabBar'
+import { Flame, Image, Smile } from 'lucide-react'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
 import CategoryBadge from '../components/shared/CategoryBadge'
-import { useTheme } from '../contexts/ThemeContext'
 
 interface ModalState {
   entry: JournalEntry
@@ -16,7 +14,6 @@ export default function Archive() {
   const [journals, setJournals] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<ModalState | null>(null)
-  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     getAllJournals()
@@ -38,35 +35,8 @@ export default function Archive() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-      {/* Header */}
-      <div
-        className="safe-top sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
-        style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
-      >
-        <Link to="/" className="hidden md:flex p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-lg font-bold font-serif" style={{ color: 'var(--color-text)' }}>보관함</h1>
-        <span className="text-xs ml-auto" style={{ color: 'var(--color-muted)' }}>{journals.length}개</span>
-        <button
-          onClick={toggleTheme}
-          style={{
-            background: 'var(--color-card)',
-            border: '1px solid var(--color-border)',
-            color: 'var(--color-muted)',
-            borderRadius: '8px',
-            padding: '6px 10px',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-          title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
-      </div>
-
-      <div className="max-w-2xl mx-auto px-4 py-6 pb-tab-bar">
+    <div>
+      <div className="max-w-2xl mx-auto px-4 py-6">
         {journals.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>아직 완료된 일기가 없습니다.</p>
@@ -75,44 +45,48 @@ export default function Archive() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-3">
-            {journals.map((entry) => {
-              const mission = missions.find((m) => m.id === entry.missionId)
-              if (!mission) return null
-              return (
-                <button
-                  key={entry.id}
-                  onClick={() => setModal({ entry, mission })}
-                  className="w-full text-left rounded-xl border p-4 transition-all hover-surface"
-                  style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <CategoryBadge category={mission.category} size="sm" />
-                        <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{entry.id}</span>
+          <>
+            {/* Count shown in page body since header is now global */}
+            <p className="text-xs mb-3" style={{ color: 'var(--color-muted)' }}>
+              {journals.length}개의 완료된 일기
+            </p>
+            <div className="space-y-3">
+              {journals.map((entry) => {
+                const mission = missions.find((m) => m.id === entry.missionId)
+                if (!mission) return null
+                return (
+                  <button
+                    key={entry.id}
+                    onClick={() => setModal({ entry, mission })}
+                    className="w-full text-left rounded-xl border p-4 transition-all hover-surface"
+                    style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <CategoryBadge category={mission.category} size="sm" />
+                          <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{entry.id}</span>
+                        </div>
+                        <h3 className="text-sm font-bold mb-1" style={{ color: 'var(--color-text)' }}>{mission.title}</h3>
+                        <JournalPreview entry={entry} />
                       </div>
-                      <h3 className="text-sm font-bold mb-1" style={{ color: 'var(--color-text)' }}>{mission.title}</h3>
-                      <JournalPreview entry={entry} />
-                    </div>
 
-                    {entry.type === 'canvas' && entry.content && (
-                      <img
-                        src={entry.content}
-                        alt="썸네일"
-                        className="w-16 h-10 object-cover rounded shrink-0 border"
-                        style={{ borderColor: 'var(--color-border)' }}
-                      />
-                    )}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+                      {entry.type === 'canvas' && entry.content && (
+                        <img
+                          src={entry.content}
+                          alt="썸네일"
+                          className="w-16 h-10 object-cover rounded shrink-0 border"
+                          style={{ borderColor: 'var(--color-border)' }}
+                        />
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
-
-      <BottomTabBar />
 
       {/* Detail modal */}
       {modal && (

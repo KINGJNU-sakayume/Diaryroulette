@@ -1,16 +1,12 @@
 import { useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { RotateCw, Archive, BarChart2, FileText } from 'lucide-react'
+import { RotateCw } from 'lucide-react'
 import SlotMachinePicker from '../components/SlotMachine/SlotMachinePicker'
 import MissionCard from '../components/Roulette/MissionCard'
 import { useTodayMission } from '../hooks/useTodayMission'
-import { useTheme } from '../contexts/ThemeContext'
-import BottomTabBar from '../components/shared/BottomTabBar'
 
 export default function Home() {
   const { todayRecord, mission, loading, drawMission } = useTodayMission()
   const [isSpinning, setIsSpinning] = useState(false)
-  const { theme, toggleTheme } = useTheme()
 
   const handleSpin = useCallback(async () => {
     if (isSpinning || todayRecord) return
@@ -34,41 +30,8 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-      {/* Nav */}
-      <nav
-        className="safe-top sticky top-0 z-30 flex items-center justify-between px-6 py-3 border-b"
-        style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
-      >
-        {/* Brand */}
-        <span className="text-xl font-bold font-serif" style={{ color: 'var(--color-text)' }}>일기 룰렛</span>
-
-        {/* Desktop nav links — hidden on mobile */}
-        <div className="hidden md:flex items-center gap-1">
-          <NavLink to="/archive" icon={<Archive className="w-4 h-4" />} label="보관함" />
-          <NavLink to="/drafts"  icon={<FileText className="w-4 h-4" />} label="임시저장" />
-          <NavLink to="/stats"   icon={<BarChart2 className="w-4 h-4" />} label="통계" />
-        </div>
-
-        {/* Theme toggle — always visible */}
-        <button
-          onClick={toggleTheme}
-          style={{
-            background: 'var(--color-card)',
-            border: '1px solid var(--color-border)',
-            color: 'var(--color-muted)',
-            borderRadius: '8px',
-            padding: '6px 10px',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-          title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
-      </nav>
-
-      <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col items-center gap-8 pb-tab-bar">
+    <div>
+      <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col items-center gap-8">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold font-serif mb-2" style={{ color: 'var(--color-text)' }}>
@@ -118,21 +81,6 @@ export default function Home() {
         )}
 
       </div>
-      <BottomTabBar />
     </div>
   )
 }
-
-function NavLink({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs hover-surface transition-colors"
-      style={{ color: 'var(--color-text-mid)' }}
-    >
-      {icon}
-      {label}
-    </Link>
-  )
-}
-
