@@ -9,7 +9,7 @@ interface CanvasEditorProps {
 
 const CANVAS_WIDTH = 800
 const CANVAS_HEIGHT = 450
-const CANVAS_BG = CANVAS_BG
+const CANVAS_BG = '#0d1117'
 const COLORS = ['#e6edf3', '#ef4444', '#f97316', '#facc15', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6']
 
 export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = false }: CanvasEditorProps) {
