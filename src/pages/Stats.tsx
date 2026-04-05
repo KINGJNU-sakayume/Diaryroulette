@@ -52,7 +52,7 @@ export default function Stats() {
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
       <div
-        className="sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
+        className="safe-top sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
         <Link to="/" className="p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
