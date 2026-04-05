@@ -1,8 +1,9 @@
 import { type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Clock, Type, Image as ImageIcon, Smile, Trash2 } from 'lucide-react'
-import { type Mission, CATEGORY_COLORS, CATEGORY_LABELS } from '../../data/missions'
+import { type Mission, getCategoryColors, CATEGORY_LABELS } from '../../data/missions'
 import { inspirationCards } from '../../data/inspirationCards'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface MissionCardProps {
   mission: Mission
@@ -33,7 +34,8 @@ function EditorTypeLabel(type: Mission['editorType']): string {
 
 export default function MissionCard({ mission, extraData, date }: MissionCardProps) {
   const navigate = useNavigate()
-  const colors = CATEGORY_COLORS[mission.category]
+  const { theme } = useTheme()
+  const colors = getCategoryColors(theme)[mission.category]
 
   // For creative-1, pick a random inspiration card
   const inspirationCard =
@@ -53,7 +55,7 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
     <div
       className="rounded-2xl border p-6 animate-fadeIn"
       style={{
-        background: 'linear-gradient(135deg, #161b22 0%, #1c2128 100%)',
+        background: `linear-gradient(135deg, var(--color-surface), var(--color-card))`,
         borderColor: colors.border,
       }}
     >
@@ -66,11 +68,11 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
           >
             {CATEGORY_LABELS[mission.category]}
           </span>
-          <h2 className="text-xl font-bold text-white font-serif">{mission.title}</h2>
+          <h2 className="text-xl font-bold font-serif" style={{ color: 'var(--color-text)' }}>{mission.title}</h2>
         </div>
         <div
           className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg shrink-0"
-          style={{ background: '#21262d', color: '#8b949e' }}
+          style={{ background: 'var(--color-card)', color: 'var(--color-muted)' }}
         >
           <EditorIcon type={mission.editorType} />
           <span>{EditorTypeLabel(mission.editorType)}</span>
@@ -78,13 +80,13 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
       </div>
 
       {/* Description */}
-      <p className="text-slate-300 text-sm leading-relaxed mb-4">{mission.description}</p>
+      <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--color-text)' }}>{mission.description}</p>
 
       {/* Rules */}
       {mission.rules && mission.rules.length > 0 && (
         <ul className="mb-4 space-y-1">
           {mission.rules.map((rule, i) => (
-            <li key={i} className="flex items-start gap-2 text-xs text-slate-400">
+            <li key={i} className="flex items-start gap-2 text-xs" style={{ color: 'var(--color-text-mid)' }}>
               <span style={{ color: colors.text }}>•</span>
               {rule}
             </li>
@@ -114,7 +116,7 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
       {inspirationCard && (
         <div
           className="mb-4 p-4 rounded-xl text-sm italic"
-          style={{ background: '#0d1117', border: `1px solid ${colors.border}`, color: colors.text }}
+          style={{ background: 'var(--color-bg)', border: `1px solid ${colors.border}`, color: colors.text }}
         >
           <span className="text-xs not-italic opacity-60 block mb-1">✨ 오늘의 영감 카드</span>
           "{inspirationCard}"
@@ -123,7 +125,7 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
 
       {/* Char limit info */}
       {mission.charLimit && (
-        <div className="mb-4 text-xs text-slate-500">
+        <div className="mb-4 text-xs" style={{ color: 'var(--color-muted)' }}>
           {mission.charLimit.min && mission.charLimit.max
             ? `목표: ${mission.charLimit.min}–${mission.charLimit.max}자`
             : mission.charLimit.min
@@ -135,8 +137,8 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
       {/* CTA */}
       <button
         onClick={handleWrite}
-        className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-bold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
-        style={{ background: `linear-gradient(135deg, ${colors.bg}, ${colors.border})` }}
+        className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-bold transition-all duration-200 hover:opacity-90 active:scale-95"
+        style={{ background: `linear-gradient(135deg, ${colors.bg}, ${colors.border})`, color: '#fff' }}
       >
         오늘 일기 쓰러 가기
         <ArrowRight className="w-4 h-4" />

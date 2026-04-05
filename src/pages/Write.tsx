@@ -10,6 +10,7 @@ import TimedTextEditor from '../components/Editor/TimedTextEditor'
 import CanvasEditor from '../components/Editor/CanvasEditor'
 import EmojiEditor from '../components/Editor/EmojiEditor'
 import TrashEditor from '../components/Editor/TrashEditor'
+import { useTheme } from '../contexts/ThemeContext'
 
 // Auto-save interval in ms
 const AUTO_SAVE_MS = 5000
@@ -17,6 +18,7 @@ const AUTO_SAVE_MS = 5000
 export default function Write() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
 
   const dateParam = searchParams.get('date')
   const missionIdParam = searchParams.get('missionId')
@@ -163,17 +165,17 @@ export default function Write() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0d1117' }}>
-        <div className="text-slate-500 text-sm animate-pulse">로딩 중…</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-sm animate-pulse" style={{ color: 'var(--color-muted)' }}>로딩 중…</div>
       </div>
     )
   }
 
   if (!mission) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0d1117' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
         <div className="text-center">
-          <p className="text-slate-400 mb-4">미션을 찾을 수 없습니다.</p>
+          <p className="mb-4" style={{ color: 'var(--color-text-mid)' }}>미션을 찾을 수 없습니다.</p>
           <Link to="/" className="text-violet-400 hover:underline text-sm">
             홈으로 돌아가기
           </Link>
@@ -189,79 +191,99 @@ export default function Write() {
   const isEmotionTemp = mission.id === 'visual-5'
 
   return (
-    <div className="min-h-screen" style={{ background: '#0d1117' }}>
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
       <div
         className="sticky top-0 z-30 border-b px-4 py-3 flex items-center justify-between gap-4"
-        style={{ background: '#0d1117ee', borderColor: '#21262d', backdropFilter: 'blur(8px)' }}
+        style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
         <div className="flex items-center gap-3 min-w-0">
           <Link
             to="/"
-            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-white shrink-0"
+            className="p-1.5 rounded-lg hover-surface transition-colors shrink-0"
+            style={{ color: 'var(--color-text-mid)' }}
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <CategoryBadge category={mission.category} size="sm" />
-              <h1 className="text-sm font-bold text-white truncate">{mission.title}</h1>
+              <h1 className="text-sm font-bold truncate" style={{ color: 'var(--color-text)' }}>{mission.title}</h1>
             </div>
-            <p className="text-xs text-slate-500">{targetDate}</p>
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{targetDate}</p>
           </div>
         </div>
 
-        {!isTrash && !isCanvas && !completed && (
+        <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={handleSave}
-            disabled={saving || !content.trim()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40 shrink-0"
-            style={{ background: '#7c3aed', color: '#fff' }}
+            onClick={toggleTheme}
+            style={{
+              background: 'var(--color-card)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-muted)',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '14px',
+            }}
+            title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
           >
-            {saved ? (
-              <>
-                <CheckCircle className="w-4 h-4" />
-                저장됨
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                {saving ? '저장 중…' : '완료'}
-              </>
-            )}
+            {theme === 'dark' ? '☀️' : '🌙'}
           </button>
-        )}
 
-        {(isCanvas || isEmotionTemp) && !completed && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40 shrink-0"
-            style={{ background: '#db2777', color: '#fff' }}
-          >
-            <Save className="w-4 h-4" />
-            {saving ? '저장 중…' : '완료'}
-          </button>
-        )}
+          {!isTrash && !isCanvas && !completed && (
+            <button
+              onClick={handleSave}
+              disabled={saving || !content.trim()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40"
+              style={{ background: 'var(--color-accent)', color: '#fff' }}
+            >
+              {saved ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  저장됨
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  {saving ? '저장 중…' : '완료'}
+                </>
+              )}
+            </button>
+          )}
+
+          {(isCanvas || isEmotionTemp) && !completed && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40"
+              style={{ background: '#db2777', color: '#fff' }}
+            >
+              <Save className="w-4 h-4" />
+              {saving ? '저장 중…' : '완료'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Completed state */}
       {completed && !isTrash && (
         <div className="max-w-xl mx-auto px-4 py-16 text-center">
           <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-2">오늘의 일기 완료!</h2>
-          <p className="text-slate-400 mb-8">수고했어요. 내일 또 새로운 미션이 기다립니다.</p>
+          <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>오늘의 일기 완료!</h2>
+          <p className="mb-8" style={{ color: 'var(--color-text-mid)' }}>수고했어요. 내일 또 새로운 미션이 기다립니다.</p>
           <div className="flex gap-3 justify-center">
             <Link
               to="/archive"
-              className="px-6 py-2.5 rounded-xl text-sm font-bold border transition-colors text-slate-300 border-slate-700 hover:bg-white/5"
+              className="px-6 py-2.5 rounded-xl text-sm font-bold border transition-colors"
+              style={{ color: 'var(--color-text)', borderColor: 'var(--color-border)' }}
             >
               보관함 보기
             </Link>
             <Link
               to="/"
-              className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-colors"
-              style={{ background: '#7c3aed' }}
+              className="px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
+              style={{ background: 'var(--color-accent)', color: '#fff' }}
             >
               홈으로
             </Link>
@@ -274,8 +296,8 @@ export default function Write() {
         <div className="max-w-3xl mx-auto px-4 py-6">
           {/* Mission description reminder */}
           <div
-            className="mb-6 p-4 rounded-xl border text-sm text-slate-400"
-            style={{ background: '#161b22', borderColor: '#30363d' }}
+            className="mb-6 p-4 rounded-xl border text-sm"
+            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-text-mid)' }}
           >
             {mission.description}
           </div>

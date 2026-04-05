@@ -4,6 +4,38 @@
 @tailwind components;
 @tailwind utilities;
 
+[data-theme="light"] {
+  --color-bg:          #FFFDF8;
+  --color-surface:     #F5EEE3;
+  --color-card:        #EDE4D5;
+  --color-border:      #D6CAB8;
+  --color-text:        #1C1510;
+  --color-text-mid:    #5A4E3F;
+  --color-muted:       #8A7A68;
+  --color-accent:      #D97706;
+  --color-accent-dark: #B45309;
+  --color-accent-bg:   #FEF3C7;
+  --scrollbar-track:   #F0E9DC;
+  --scrollbar-thumb:   #C8BAA8;
+  --color-bg-nav:      rgba(255, 253, 248, 0.93);
+}
+
+[data-theme="dark"] {
+  --color-bg:          #0d1117;
+  --color-surface:     #161b22;
+  --color-card:        #21262d;
+  --color-border:      #30363d;
+  --color-text:        #e6edf3;
+  --color-text-mid:    #c9d1d9;
+  --color-muted:       #8b949e;
+  --color-accent:      #7c3aed;
+  --color-accent-dark: #5b21b6;
+  --color-accent-bg:   #2d2057;
+  --scrollbar-track:   #161b22;
+  --scrollbar-thumb:   #30363d;
+  --color-bg-nav:      rgba(13, 17, 23, 0.93);
+}
+
 html,
 body,
 #root {
@@ -13,8 +45,8 @@ body,
 
 body {
   margin: 0;
-  background-color: #0d1117;
-  color: #e6edf3;
+  background: var(--color-bg);
+  color: var(--color-text);
   font-family: 'Noto Serif KR', serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -26,17 +58,22 @@ mark { color: inherit; }
   box-sizing: border-box;
 }
 
+/* Hover utility — replaces hover:bg-white/5 */
+.hover-surface:hover {
+  background-color: var(--color-card);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #161b22;
+  background: var(--scrollbar-track);
 }
 ::-webkit-scrollbar-thumb {
-  background: #30363d;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
+  background: var(--color-border);
 }

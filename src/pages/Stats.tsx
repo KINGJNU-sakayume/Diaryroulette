@@ -7,11 +7,13 @@ import { missions, CATEGORY_COLORS, CATEGORY_LABELS, type MissionCategory } from
 import { exportToJSON } from '../utils/exportData'
 import { validateExportData, importFromJSON } from '../utils/importData'
 import type { ExportData } from '../utils/exportData'
+import { useTheme } from '../contexts/ThemeContext'
 
 export default function Stats() {
   const [journals, setJournals] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const { getActiveCooldowns, loading: cooldownLoading } = useCooldown()
+  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     getAllJournals()
@@ -21,8 +23,8 @@ export default function Stats() {
 
   if (loading || cooldownLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0d1117' }}>
-        <div className="text-slate-500 text-sm animate-pulse">로딩 중…</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-sm animate-pulse" style={{ color: 'var(--color-muted)' }}>로딩 중…</div>
       </div>
     )
   }
@@ -42,37 +44,54 @@ export default function Stats() {
   const activeCooldowns = getActiveCooldowns()
 
   return (
-    <div className="min-h-screen" style={{ background: '#0d1117' }}>
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
       <div
         className="sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
-        style={{ background: '#0d1117ee', borderColor: '#21262d', backdropFilter: 'blur(8px)' }}
+        style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
-        <Link to="/" className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white">
+        <Link to="/" className="p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-lg font-bold font-serif text-white">통계</h1>
+        <h1 className="text-lg font-bold font-serif" style={{ color: 'var(--color-text)' }}>통계</h1>
+        <div className="ml-auto">
+          <button
+            onClick={toggleTheme}
+            style={{
+              background: 'var(--color-card)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-muted)',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '14px',
+            }}
+            title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         {/* Cycle progress */}
         <Section title="사이클 진행도">
           <div className="text-center py-4">
-            <div className="text-5xl font-bold text-white mb-1">
+            <div className="text-5xl font-bold mb-1" style={{ color: 'var(--color-text)' }}>
               {completedCount}
-              <span className="text-2xl text-slate-500"> / {totalMissions}</span>
+              <span className="text-2xl" style={{ color: 'var(--color-muted)' }}> / {totalMissions}</span>
             </div>
-            <p className="text-slate-500 text-sm">미션 완료</p>
-            <div className="mt-4 h-2 rounded-full overflow-hidden" style={{ background: '#21262d' }}>
+            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>미션 완료</p>
+            <div className="mt-4 h-2 rounded-full overflow-hidden" style={{ background: 'var(--color-card)' }}>
               <div
                 className="h-full rounded-full transition-all"
                 style={{
                   width: `${(completedCount / totalMissions) * 100}%`,
-                  background: 'linear-gradient(90deg, #7c3aed, #0891b2)',
+                  background: 'linear-gradient(90deg, var(--color-accent), #0891b2)',
                 }}
               />
             </div>
-            <p className="text-xs text-slate-600 mt-2">
+            <p className="text-xs mt-2" style={{ color: 'var(--color-muted)' }}>
               {totalMissions - completedCount}개 남음
             </p>
           </div>
@@ -88,8 +107,8 @@ export default function Stats() {
                   className="w-3 h-3 rounded-full mx-auto mb-1"
                   style={{ background: CATEGORY_COLORS[cat].bg }}
                 />
-                <p className="text-xs text-slate-500">{CATEGORY_LABELS[cat]}</p>
-                <p className="text-sm font-bold text-white">{categoryCount[cat]}</p>
+                <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{CATEGORY_LABELS[cat]}</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>{categoryCount[cat]}</p>
               </div>
             ))}
           </div>
@@ -112,13 +131,13 @@ export default function Stats() {
                   <div
                     key={entry.missionId}
                     className="flex items-center justify-between p-3 rounded-lg border"
-                    style={{ background: '#161b22', borderColor: '#30363d' }}
+                    style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: colors.bg }} />
-                      <span className="text-xs text-white">{mission.title}</span>
+                      <span className="text-xs" style={{ color: 'var(--color-text)' }}>{mission.title}</span>
                     </div>
-                    <span className="text-xs text-slate-500">{entry.daysLeft}일 후 해금</span>
+                    <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{entry.daysLeft}일 후 해금</span>
                   </div>
                 )
               })}
@@ -203,7 +222,7 @@ function DataManagement() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-500">
+      <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
         캔버스 항목이 많으면 백업 파일이 클 수 있습니다. JSON 파일에는 모든 일기와 미션 기록이 포함됩니다.
       </p>
 
@@ -211,14 +230,14 @@ function DataManagement() {
         <button
           onClick={handleExport}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80 active:scale-95"
-          style={{ background: '#21262d', border: '1px solid #30363d', color: '#e6edf3' }}
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
         >
           📤 Export JSON
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80 active:scale-95"
-          style={{ background: '#21262d', border: '1px solid #30363d', color: '#e6edf3' }}
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
         >
           📥 Import JSON
         </button>
@@ -248,32 +267,32 @@ function DataManagement() {
         >
           <div
             className="rounded-2xl border p-6 max-w-sm w-full space-y-4"
-            style={{ background: '#161b22', borderColor: '#30363d' }}
+            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
           >
-            <h3 className="text-base font-bold text-white">데이터 가져오기</h3>
+            <h3 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>데이터 가져오기</h3>
             {importWarning && (
               <p className="text-xs text-amber-400 bg-amber-400/10 rounded-lg px-3 py-2">
                 ⚠️ {importWarning}
               </p>
             )}
-            <p className="text-sm text-slate-400">
+            <p className="text-sm" style={{ color: 'var(--color-text-mid)' }}>
               이 작업은 현재 데이터를 모두 덮어씁니다. 계속하시겠습니까?
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
               This will overwrite all current data. Continue?
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => { setShowConfirm(false); setPendingData(null) }}
                 className="flex-1 py-2 rounded-lg text-sm font-medium"
-                style={{ background: '#21262d', border: '1px solid #30363d', color: '#8b949e' }}
+                style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-muted)' }}
               >
                 취소
               </button>
               <button
                 onClick={handleConfirmImport}
                 className="flex-1 py-2 rounded-lg text-sm font-medium"
-                style={{ background: '#7c3aed', color: '#fff' }}
+                style={{ background: 'var(--color-accent)', color: '#fff' }}
               >
                 가져오기
               </button>
@@ -301,8 +320,8 @@ function DataManagement() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border p-5" style={{ background: '#161b22', borderColor: '#30363d' }}>
-      <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">{title}</h2>
+    <div className="rounded-2xl border p-5" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+      <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--color-text-mid)' }}>{title}</h2>
       {children}
     </div>
   )
@@ -327,8 +346,8 @@ function DonutChart({
     return (
       <div className="flex justify-center">
         <svg width={SIZE} height={SIZE}>
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#21262d" strokeWidth={r - innerR} />
-          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fill="#8b949e">
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--color-card)" strokeWidth={r - innerR} />
+          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fill="var(--color-muted)">
             없음
           </text>
         </svg>
@@ -375,7 +394,7 @@ function DonutChart({
           cy={cy}
           r={(R + IR) / 2}
           fill="none"
-          stroke="#21262d"
+          stroke="var(--color-card)"
           strokeWidth={strokeW}
         />
         {/* Slices */}
@@ -390,10 +409,10 @@ function DonutChart({
           />
         ))}
         {/* Center text */}
-        <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" fontSize="20" fontWeight="bold" fill="#e6edf3">
+        <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" fontSize="20" fontWeight="bold" fill="var(--color-text)">
           {total}
         </text>
-        <text x={cx} y={cy + 12} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="#8b949e">
+        <text x={cx} y={cy + 12} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="var(--color-muted)">
           완료
         </text>
       </svg>
@@ -443,7 +462,7 @@ function StreakCalendar({ journals }: { journals: JournalEntry[] }) {
               width={CELL}
               height={CELL}
               rx={2}
-              fill={filled ? '#65a30d' : '#21262d'}
+              fill={filled ? '#65a30d' : 'var(--color-card)'}
               opacity={filled ? 1 : 0.6}
             >
               <title>{date}</title>
@@ -451,7 +470,7 @@ function StreakCalendar({ journals }: { journals: JournalEntry[] }) {
           )
         })}
       </svg>
-      <p className="text-xs text-slate-600 mt-2">최근 16주</p>
+      <p className="text-xs mt-2" style={{ color: 'var(--color-muted)' }}>최근 16주</p>
     </div>
   )
 }

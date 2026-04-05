@@ -1,4 +1,5 @@
-import { CATEGORY_COLORS, CATEGORY_LABELS, type MissionCategory } from '../../data/missions'
+import { getCategoryColors, CATEGORY_LABELS, type MissionCategory } from '../../data/missions'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface CategoryBadgeProps {
   category: MissionCategory
@@ -6,7 +7,8 @@ interface CategoryBadgeProps {
 }
 
 export default function CategoryBadge({ category, size = 'md' }: CategoryBadgeProps) {
-  const colors = CATEGORY_COLORS[category]
+  const { theme } = useTheme()
+  const colors = getCategoryColors(theme)[category]
   const label = CATEGORY_LABELS[category]
 
   return (

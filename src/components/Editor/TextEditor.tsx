@@ -308,7 +308,7 @@ export default function TextEditor({
               fontFamily: 'inherit',
               fontSize: '0.875rem',
               lineHeight: '1.625',
-              color: '#e6edf3',
+              color: 'var(--color-text)',
               zIndex: 3,
             }}
             dangerouslySetInnerHTML={{ __html: highlightedHTML || escapeHTML(value) }}
@@ -324,10 +324,10 @@ export default function TextEditor({
           placeholder={placeholder}
           className="w-full min-h-64 p-4 rounded-xl border text-sm leading-relaxed resize-y outline-none transition-colors"
           style={{
-            background: '#161b22',
-            borderColor: isOverMax ? '#ef4444' : '#30363d',
-            color: (forceInvisible || needsHighlight) ? 'transparent' : '#e6edf3',
-            caretColor: '#e6edf3',
+            background: 'var(--color-surface)',
+            borderColor: isOverMax ? '#ef4444' : 'var(--color-border)',
+            color: (forceInvisible || needsHighlight) ? 'transparent' : 'var(--color-text)',
+            caretColor: 'var(--color-text)',
             fontFamily: 'inherit',
             position: 'relative',
             zIndex: 2,
@@ -350,7 +350,7 @@ export default function TextEditor({
         </div>
         <span
           className="text-xs shrink-0"
-          style={{ color: isOverMax ? '#ef4444' : '#8b949e' }}
+          style={{ color: isOverMax ? '#ef4444' : 'var(--color-muted)' }}
         >
           {charCount}
           {charLimit?.max && ` / ${charLimit.max}`}

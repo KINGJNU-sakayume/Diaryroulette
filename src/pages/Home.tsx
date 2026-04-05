@@ -6,11 +6,13 @@ import { missions } from '../data/missions'
 import MissionCard from '../components/Roulette/MissionCard'
 import { useTodayMission } from '../hooks/useTodayMission'
 import { getJournalsByStatus } from '../db/indexedDB'
+import { useTheme } from '../contexts/ThemeContext'
 
 export default function Home() {
   const { todayRecord, mission, loading, drawMission } = useTodayMission()
   const [isSpinning, setIsSpinning] = useState(false)
   const [completedCount, setCompletedCount] = useState(0)
+  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     getJournalsByStatus('completed').then((list) => setCompletedCount(list.length))
@@ -31,36 +33,51 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0d1117' }}>
-        <div className="text-slate-500 text-sm animate-pulse">로딩 중…</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-sm animate-pulse" style={{ color: 'var(--color-muted)' }}>로딩 중…</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#0d1117' }}>
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Nav */}
       <nav
         className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 border-b"
-        style={{ background: '#0d1117ee', borderColor: '#21262d', backdropFilter: 'blur(8px)' }}
+        style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
         <div className="flex items-center gap-2">
-          <span className="text-xl font-bold font-serif text-white">일기 룰렛</span>
+          <span className="text-xl font-bold font-serif" style={{ color: 'var(--color-text)' }}>일기 룰렛</span>
         </div>
         <div className="flex items-center gap-1">
           <NavLink to="/archive" icon={<Archive className="w-4 h-4" />} label="보관함" />
           <NavLink to="/drafts" icon={<FileText className="w-4 h-4" />} label="임시저장" />
           <NavLink to="/stats" icon={<BarChart2 className="w-4 h-4" />} label="통계" />
+          <button
+            onClick={toggleTheme}
+            style={{
+              background: 'var(--color-card)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-muted)',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '14px',
+            }}
+            title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
         </div>
       </nav>
 
       <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col items-center gap-8">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold font-serif text-white mb-2">
+          <h1 className="text-3xl font-bold font-serif mb-2" style={{ color: 'var(--color-text)' }}>
             오늘의 글쓰기 미션
           </h1>
-          <p className="text-slate-500 text-sm">
+          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
             {todayRecord
               ? '오늘의 미션이 정해졌습니다'
               : '룰렛을 돌려 오늘의 제약을 받아보세요'}
@@ -70,10 +87,10 @@ export default function Home() {
         {/* Cycle progress */}
         <div
           className="w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm"
-          style={{ background: '#161b22', borderColor: '#30363d' }}
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
         >
-          <span className="text-slate-400">이번 사이클 진행도</span>
-          <span className="font-bold text-white">
+          <span style={{ color: 'var(--color-text-mid)' }}>이번 사이클 진행도</span>
+          <span className="font-bold" style={{ color: 'var(--color-text)' }}>
             {completedCount} / {missions.length} 완료 🎯
           </span>
         </div>
@@ -89,8 +106,8 @@ export default function Home() {
           {!todayRecord && !isSpinning && (
             <button
               onClick={handleSpin}
-              className="flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)' }}
+              className="flex items-center gap-2 px-8 py-3 rounded-xl font-bold transition-all duration-200 hover:opacity-90 active:scale-95"
+              style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-dark))', color: '#fff' }}
             >
               <RotateCw className="w-5 h-5" />
               룰렛 돌리기
@@ -98,7 +115,7 @@ export default function Home() {
           )}
 
           {isSpinning && (
-            <div className="text-slate-400 text-sm animate-pulse">
+            <div className="text-sm animate-pulse" style={{ color: 'var(--color-text-mid)' }}>
               미션을 추첨하는 중…
             </div>
           )}
@@ -147,7 +164,8 @@ function NavLink({ to, icon, label }: { to: string; icon: React.ReactNode; label
   return (
     <Link
       to={to}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs hover-surface transition-colors"
+      style={{ color: 'var(--color-text-mid)' }}
     >
       {icon}
       {label}
@@ -172,12 +190,12 @@ function QuickCard({
     <Link
       to={to}
       className="flex flex-col items-center gap-2 p-4 rounded-xl border transition-all hover:border-opacity-60 hover:scale-105"
-      style={{ background: '#161b22', borderColor: '#30363d', color }}
+      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color }}
     >
       {icon}
       <div className="text-center">
-        <p className="text-xs font-bold text-white">{label}</p>
-        <p className="text-xs text-slate-500">{sub}</p>
+        <p className="text-xs font-bold" style={{ color: 'var(--color-text)' }}>{label}</p>
+        <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{sub}</p>
       </div>
     </Link>
   )
