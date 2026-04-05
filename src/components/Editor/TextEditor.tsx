@@ -309,7 +309,7 @@ export default function TextEditor({
               fontSize: '0.875rem',
               lineHeight: '1.625',
               color: '#e6edf3',
-              zIndex: 1,
+              zIndex: 3,
             }}
             dangerouslySetInnerHTML={{ __html: highlightedHTML || escapeHTML(value) }}
           />
