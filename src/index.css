@@ -20,6 +20,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+mark { color: inherit; }
+
 * {
   box-sizing: border-box;
 }
