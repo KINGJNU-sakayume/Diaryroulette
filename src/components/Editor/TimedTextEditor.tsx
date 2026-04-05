@@ -79,9 +79,9 @@ export default function TimedTextEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Timer display */}
+      {/* Timer display — raised above blackout overlay so reveal button remains visible */}
       <div
-        className="flex items-center justify-between p-4 rounded-xl border"
+        className={`flex items-center justify-between p-4 rounded-xl border${isBlackout && !revealed ? ' relative z-50' : ''}`}
         style={{ background: '#161b22', borderColor: '#30363d' }}
       >
         <div className="flex items-center gap-3">
@@ -131,17 +131,17 @@ export default function TimedTextEditor({
         </div>
       )}
 
-      {/* Blackout overlay */}
+      {/* Blackout overlay — pointer-events-none so typing and button clicks pass through */}
       {isBlackout && !revealed && (
-        <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.97)' }}>
+        <div className="fixed inset-0 z-40 pointer-events-none" style={{ background: 'rgba(0,0,0,0.97)' }}>
           <div className="absolute top-4 left-0 right-0 flex justify-center">
             <p className="text-slate-600 text-sm">어둠 속에서 써 내려가세요…</p>
           </div>
         </div>
       )}
 
-      {/* Editor (above blackout overlay via z-50) */}
-      <div className={isBlackout && !revealed ? 'relative z-50' : ''}>
+      {/* Editor — forceInvisible hides text during blackout while keeping caret visible */}
+      <div>
         <TextEditor
           value={value}
           onChange={handleChange}
@@ -149,6 +149,7 @@ export default function TimedTextEditor({
           extraData={extraData}
           charLimit={mission.charLimit}
           onKeyDown={handleKeyDown}
+          forceInvisible={isBlackout && !revealed}
           placeholder={
             isBlackout
               ? '어둠 속에서 자유롭게 써 보세요. 저장하면 내용이 드러납니다…'
