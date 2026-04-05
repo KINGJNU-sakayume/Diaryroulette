@@ -33,7 +33,9 @@ export default function Write() {
   const [completed, setCompleted] = useState(false)
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const contentRef = useRef(content)
-  contentRef.current = content
+  useEffect(() => {
+    contentRef.current = content
+  }, [content])
 
   // Load mission + existing draft
   useEffect(() => {
@@ -83,21 +85,6 @@ export default function Write() {
     load()
   }, [targetDate, missionIdParam, today, navigate])
 
-  // Auto-save draft
-  useEffect(() => {
-    if (!mission || loading) return
-
-    autoSaveRef.current = setInterval(async () => {
-      if (contentRef.current) {
-        await autoSaveDraft()
-      }
-    }, AUTO_SAVE_MS)
-
-    return () => {
-      if (autoSaveRef.current) clearInterval(autoSaveRef.current)
-    }
-  }, [mission, loading])
-
   const autoSaveDraft = useCallback(async () => {
     if (!mission) return
     const entry: JournalEntry = {
@@ -112,6 +99,26 @@ export default function Write() {
     await saveJournal(entry)
     setJournal(entry)
   }, [mission, targetDate, journal])
+
+  const autoSaveDraftRef = useRef(autoSaveDraft)
+  useEffect(() => {
+    autoSaveDraftRef.current = autoSaveDraft
+  }, [autoSaveDraft])
+
+  // Auto-save draft
+  useEffect(() => {
+    if (!mission || loading) return
+
+    autoSaveRef.current = setInterval(async () => {
+      if (contentRef.current) {
+        await autoSaveDraftRef.current()
+      }
+    }, AUTO_SAVE_MS)
+
+    return () => {
+      if (autoSaveRef.current) clearInterval(autoSaveRef.current)
+    }
+  }, [mission, loading])
 
   const handleSave = useCallback(async () => {
     if (!mission) return

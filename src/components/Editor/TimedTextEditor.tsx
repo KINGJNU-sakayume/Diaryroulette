@@ -52,13 +52,6 @@ export default function TimedTextEditor({
     }
   }, [])
 
-  // Celebrate when charMin is reached
-  useEffect(() => {
-    if (charMin && value.length >= charMin && !celebrated) {
-      setCelebrated(true)
-    }
-  }, [value.length, charMin, celebrated])
-
   const timeRemaining = isCountdown ? (timerSeconds ?? 0) - elapsed : elapsed
   const isTimeUp = isCountdown && elapsed >= (timerSeconds ?? 0)
 
@@ -76,9 +69,12 @@ export default function TimedTextEditor({
   const handleChange = useCallback(
     (val: string) => {
       if (!started) startTimer()
+      if (charMin && val.length >= charMin) {
+        setCelebrated(true)
+      }
       onChange(val)
     },
-    [started, startTimer, onChange],
+    [started, startTimer, onChange, charMin],
   )
 
   return (
