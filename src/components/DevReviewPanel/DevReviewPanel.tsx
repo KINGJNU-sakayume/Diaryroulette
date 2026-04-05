@@ -288,12 +288,16 @@ export default function DevReviewPanel() {
                   onChange={(e) => setSelectedMissionId(e.target.value)}
                   style={{
                     flex: 1,
+                    minWidth: 0,
+                    maxWidth: 160,
                     background: '#161b22',
                     border: '1px solid #30363d',
                     color: '#e6edf3',
                     borderRadius: 6,
                     padding: '4px 6px',
                     fontSize: 11,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                   }}
                 >
                   {missions.map((m) => (
