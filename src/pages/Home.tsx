@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { RotateCw, BookOpen, Archive, BarChart2, FileText } from 'lucide-react'
 import SlotMachinePicker from '../components/SlotMachine/SlotMachinePicker'
-import { missions } from '../data/missions'
 import MissionCard from '../components/Roulette/MissionCard'
 import { useTodayMission } from '../hooks/useTodayMission'
 import { getJournalsByStatus } from '../db/indexedDB'
@@ -84,17 +83,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Cycle progress */}
-        <div
-          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm"
-          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-        >
-          <span style={{ color: 'var(--color-text-mid)' }}>이번 사이클 진행도</span>
-          <span className="font-bold" style={{ color: 'var(--color-text)' }}>
-            {completedCount} / {missions.length} 완료 🎯
-          </span>
-        </div>
-
         {/* Roulette wheel */}
         <div className="flex flex-col items-center gap-6">
           <SlotMachinePicker
@@ -120,6 +108,10 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+          총 {completedCount}회 완료
+        </p>
 
         {/* Mission card — shown after spin or if already drawn today */}
         {mission && todayRecord && !isSpinning && (

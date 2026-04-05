@@ -30,7 +30,6 @@ export default function Stats() {
   }
 
   const completedCount = journals.length
-  const totalMissions = missions.length
 
   // Count by category
   const categoryCount: Record<MissionCategory, number> = {
@@ -39,6 +38,12 @@ export default function Stats() {
   for (const j of journals) {
     const m = missions.find((x) => x.id === j.missionId)
     if (m) categoryCount[m.category]++
+  }
+
+  // Count completions per mission (can exceed 1 due to 7-day rolling cooldown)
+  const missionCount: Record<string, number> = {}
+  for (const j of journals) {
+    missionCount[j.missionId] = (missionCount[j.missionId] ?? 0) + 1
   }
 
   const activeCooldowns = getActiveCooldowns()
@@ -74,29 +79,6 @@ export default function Stats() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Cycle progress */}
-        <Section title="사이클 진행도">
-          <div className="text-center py-4">
-            <div className="text-5xl font-bold mb-1" style={{ color: 'var(--color-text)' }}>
-              {completedCount}
-              <span className="text-2xl" style={{ color: 'var(--color-muted)' }}> / {totalMissions}</span>
-            </div>
-            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>미션 완료</p>
-            <div className="mt-4 h-2 rounded-full overflow-hidden" style={{ background: 'var(--color-card)' }}>
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${(completedCount / totalMissions) * 100}%`,
-                  background: 'linear-gradient(90deg, var(--color-accent), #0891b2)',
-                }}
-              />
-            </div>
-            <p className="text-xs mt-2" style={{ color: 'var(--color-muted)' }}>
-              {totalMissions - completedCount}개 남음
-            </p>
-          </div>
-        </Section>
-
         {/* Donut chart */}
         <Section title="카테고리별 완료">
           <DonutChart categoryCount={categoryCount} total={completedCount} />
@@ -111,6 +93,52 @@ export default function Stats() {
                 <p className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>{categoryCount[cat]}</p>
               </div>
             ))}
+          </div>
+        </Section>
+
+        {/* Per-mission completion counts */}
+        <Section title="미션별 완료 횟수">
+          <div className="space-y-5">
+            {(Object.keys(CATEGORY_LABELS) as MissionCategory[]).map((cat) => {
+              const catMissions = missions.filter((m) => m.category === cat)
+              const colors = CATEGORY_COLORS[cat]
+              return (
+                <div key={cat}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: colors.bg }} />
+                    <span className="text-xs font-bold uppercase tracking-wider"
+                      style={{ color: colors.text }}>
+                      {CATEGORY_LABELS[cat]}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {catMissions.map((m) => {
+                      const count = missionCount[m.id] ?? 0
+                      const barWidth = count === 0 ? 0 : Math.min((count / Math.max(...Object.values(missionCount), 1)) * 100, 100)
+                      return (
+                        <div key={m.id}
+                          className="flex items-center gap-3 py-1.5 px-3 rounded-lg"
+                          style={{ background: 'var(--color-card)' }}>
+                          <span className="text-xs flex-1 truncate"
+                            style={{ color: count > 0 ? 'var(--color-text)' : 'var(--color-muted)' }}>
+                            {m.title}
+                          </span>
+                          <div className="w-20 h-1.5 rounded-full overflow-hidden"
+                            style={{ background: 'var(--color-border)' }}>
+                            <div className="h-full rounded-full transition-all"
+                              style={{ width: `${barWidth}%`, background: colors.bg }} />
+                          </div>
+                          <span className="text-xs font-bold tabular-nums w-6 text-right"
+                            style={{ color: count > 0 ? colors.text : 'var(--color-muted)' }}>
+                            {count}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </Section>
 
