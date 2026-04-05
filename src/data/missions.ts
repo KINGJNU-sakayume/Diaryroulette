@@ -11,6 +11,8 @@ export interface Mission {
   timerSeconds?: number
   charLimit?: { min?: number; max?: number }
   backspaceDisabled?: boolean
+  template?: string
+  showTimer?: boolean
 }
 
 export const missions: Mission[] = [
@@ -61,7 +63,7 @@ export const missions: Mission[] = [
     title: '초성 맞춤 일기',
     description: '각 문장의 첫 글자를 ㄱ, ㄴ, ㄷ, ㄹ, ㅁ… 순서로 이어가며 일기를 써 보세요.',
     editorType: 'text',
-    rules: ['문장 첫 글자가 한국어 자음 순서를 따라야 함 (ㄱ→ㄴ→ㄷ→…)'],
+    rules: ['문장의 첫 글자 초성이 ㄱ→ㄴ→ㄷ→… 순서를 따라야 함', '온점·줄바꿈 모두 문장 종료로 인식 (이중 카운트 없음)'],
   },
   {
     id: 'lang-7',
@@ -93,6 +95,7 @@ export const missions: Mission[] = [
     title: '뉴스 기사 일기',
     description: '오늘 하루를 신문 기사 형식으로 써 보세요. 헤드라인, 소제목, 인터뷰 인용구를 포함하세요.',
     editorType: 'text',
+    template: '【헤드라인】\n오늘, [한 줄로 요약]\n【리드】\n[언제·어디서·무슨 일이 있었는지 2~3문장으로]\n【본문】\n[세부 내용과 맥락 서술]\n【인터뷰】\n"[직접 인용구]" — 나 (당사자)\n【결론】\n[오늘을 마무리하는 한 문장]',
   },
   {
     id: 'view-4',
@@ -132,6 +135,7 @@ export const missions: Mission[] = [
     editorType: 'timed-text',
     charLimit: { min: 1500 },
     backspaceDisabled: true,
+    showTimer: false,
   },
   {
     id: 'time-2',
@@ -159,10 +163,11 @@ export const missions: Mission[] = [
   },
   {
     id: 'time-5',
-    category: 'time',
-    title: '가나다라 순서대로 쓰기',
-    description: '각 문장을 한국어 자음 순서(ㄱ→ㄴ→ㄷ→…)로 시작하며 오늘 하루를 기록하세요.',
+    category: 'lang',
+    title: '단어마다 초성 순서 지키기',
+    description: '모든 단어의 첫 글자를 ㄱ, ㄴ, ㄷ, ㄹ, ㅁ… 순서로 이어가며 일기를 써 보세요. 문장 단위인 lang-6보다 훨씬 엄격합니다.',
     editorType: 'text',
+    rules: ['모든 한국어 단어의 첫 글자 초성이 ㄱ→ㄴ→ㄷ→… 순서를 따라야 함'],
   },
   {
     id: 'time-6',
@@ -170,6 +175,7 @@ export const missions: Mission[] = [
     title: '블랙아웃 시 쓰기',
     description: '화면이 완전히 어두워진 상태에서 써야 합니다. 무엇을 쓰는지 볼 수 없습니다. 저장할 때 비로소 내용이 드러납니다.',
     editorType: 'timed-text',
+    showTimer: false,
   },
   {
     id: 'time-7',

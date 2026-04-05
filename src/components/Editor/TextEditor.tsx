@@ -106,8 +106,8 @@ function getHighlights(
     while ((m = advEndingPattern.exec(text)) !== null) {
       ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
     }
-  } else if (missionId === 'time-5' || missionId === 'lang-6') {
-    // Highlight sentences whose first Korean syllable doesn't match expected consonant order
+  } else if (missionId === 'lang-6') {
+    // Sentence-level: first Korean syllable of each sentence must follow ㄱ→ㄴ→ㄷ…
     const sentences: { start: number; end: number }[] = []
     const terminatorPattern = /[.?!\n]/g
     let m: RegExpExecArray | null
@@ -121,7 +121,8 @@ function getHighlights(
     if (lastEnd < text.length) {
       sentences.push({ start: lastEnd, end: text.length })
     }
-    sentences.forEach((sentence, idx) => {
+    let validSentenceIdx = 0
+    sentences.forEach((sentence) => {
       const rawSentence = text.slice(sentence.start, sentence.end)
       const leadingWhitespace = rawSentence.length - rawSentence.trimStart().length
       const actualStart = sentence.start + leadingWhitespace
@@ -133,8 +134,9 @@ function getHighlights(
           break
         }
       }
-      if (firstKoreanIdx === -1) return
-      const expected = KOREAN_CONSONANTS[idx % KOREAN_CONSONANTS.length]
+      if (firstKoreanIdx === -1) return // skip — do NOT increment validSentenceIdx
+      const expected = KOREAN_CONSONANTS[validSentenceIdx % KOREAN_CONSONANTS.length]
+      validSentenceIdx++
       const actual = getChoseong(text[firstKoreanIdx])
       if (actual !== expected) {
         // Highlight from sentence start to end of first word
@@ -143,6 +145,26 @@ function getHighlights(
         ranges.push({ start: actualStart, end: wordEnd, color: '#ff4d4d' })
       }
     })
+  } else if (missionId === 'time-5') {
+    // Word-level: every Korean word's first syllable must follow ㄱ→ㄴ→ㄷ…
+    let wordIdx = 0
+    const wordPattern = /[가-힣]+/g
+    let m: RegExpExecArray | null
+    while ((m = wordPattern.exec(text)) !== null) {
+      const expected = KOREAN_CONSONANTS[wordIdx % KOREAN_CONSONANTS.length]
+      wordIdx++
+      const actual = getChoseong(m[0][0])
+      if (actual !== expected) {
+        ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
+      }
+    }
+  } else if (missionId === 'creative-2') {
+    // Every sentence must end with '?'; highlight those that end with . ! or \n
+    const sentencePattern = /[^.?!\n]+[.!\n]/g
+    let m: RegExpExecArray | null
+    while ((m = sentencePattern.exec(text)) !== null) {
+      ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
+    }
   }
 
   // time-3: highlight chars beyond max limit
@@ -212,7 +234,7 @@ interface TextEditorProps {
 
 // ─── Missions that need soft highlighting ─────────────────────────────────────
 
-const HIGHLIGHT_MISSIONS = new Set(['lang-1', 'lang-2', 'lang-3', 'lang-4', 'lang-5', 'lang-6', 'time-3', 'time-5'])
+const HIGHLIGHT_MISSIONS = new Set(['lang-1', 'lang-2', 'lang-3', 'lang-4', 'lang-5', 'lang-6', 'time-3', 'time-5', 'creative-2'])
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -263,9 +285,24 @@ export default function TextEditor({
 
   // Next expected consonant for time-5/lang-6 hint
   const nextConsonant = useMemo(() => {
-    if (missionId !== 'time-5' && missionId !== 'lang-6') return ''
-    const completedSentences = (value.match(/[.?!\n]/g) || []).length
-    return KOREAN_CONSONANTS[completedSentences % KOREAN_CONSONANTS.length]
+    if (missionId === 'lang-6') {
+      // Count only segments (between terminators) that contain at least one Korean syllable
+      const terminatorPattern = /[.?!\n]/g
+      let m: RegExpExecArray | null
+      let lastEnd = 0
+      let validSentences = 0
+      while ((m = terminatorPattern.exec(value)) !== null) {
+        const segment = value.slice(lastEnd, m.index)
+        if (/[가-힣]/.test(segment)) validSentences++
+        lastEnd = m.index + 1
+      }
+      return KOREAN_CONSONANTS[validSentences % KOREAN_CONSONANTS.length]
+    }
+    if (missionId === 'time-5') {
+      const wordCount = (value.match(/[가-힣]+/g) || []).length
+      return KOREAN_CONSONANTS[wordCount % KOREAN_CONSONANTS.length]
+    }
+    return ''
   }, [value, missionId])
 
   const charCount = value.length
@@ -299,7 +336,23 @@ export default function TextEditor({
             color: 'var(--color-text)',
           }}
         >
-          다음 문장은 &apos;{nextConsonant}&apos;으로 시작해야 합니다
+          {missionId === 'lang-6'
+            ? <>다음 문장은 &apos;{nextConsonant}&apos;으로 시작해야 합니다</>
+            : <>다음 단어는 &apos;{nextConsonant}&apos;으로 시작해야 합니다</>}
+        </div>
+      )}
+
+      {/* Question-only hint for creative-2 */}
+      {missionId === 'creative-2' && (
+        <div
+          className="text-xs rounded-lg px-3 py-2"
+          style={{
+            background: 'rgba(59, 130, 246, 0.15)',
+            border: '1px solid rgba(59, 130, 246, 0.5)',
+            color: 'var(--color-text)',
+          }}
+        >
+          모든 문장은 물음표(?)로 끝나야 합니다
         </div>
       )}
 

@@ -6,6 +6,7 @@ import {
   type TodayMissionRecord,
 } from '../db/indexedDB'
 import { useCooldown } from './useCooldown'
+import { inspirationCards } from '../data/inspirationCards'
 
 // ─── Local date helper (YYYY-MM-DD in local timezone) ─────────────────────────
 
@@ -36,6 +37,10 @@ function buildExtraData(mission: Mission): Record<string, unknown> | undefined {
   if (mission.id === 'lang-4') {
     const allowedVowel = KOREAN_VOWELS[Math.floor(Math.random() * KOREAN_VOWELS.length)]
     return { allowedVowel }
+  }
+  if (mission.id === 'creative-1') {
+    const inspirationCard = inspirationCards[Math.floor(Math.random() * inspirationCards.length)]
+    return { inspirationCard }
   }
   return undefined
 }

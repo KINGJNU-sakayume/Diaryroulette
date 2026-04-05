@@ -2,7 +2,6 @@ import { type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Clock, Type, Image as ImageIcon, Smile, Trash2 } from 'lucide-react'
 import { type Mission, getCategoryColors, CATEGORY_LABELS } from '../../data/missions'
-import { inspirationCards } from '../../data/inspirationCards'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface MissionCardProps {
@@ -37,10 +36,10 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
   const { theme } = useTheme()
   const colors = getCategoryColors(theme)[mission.category]
 
-  // For creative-1, pick a random inspiration card
+  // For creative-1, use the persisted inspiration card from extraData
   const inspirationCard =
-    mission.id === 'creative-1'
-      ? inspirationCards[Math.floor(Math.random() * inspirationCards.length)]
+    mission.id === 'creative-1' && typeof extraData?.inspirationCard === 'string'
+      ? extraData.inspirationCard
       : null
 
   const handleWrite = () => {

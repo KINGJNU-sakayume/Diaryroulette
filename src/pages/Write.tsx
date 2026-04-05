@@ -43,18 +43,19 @@ export default function Write() {
   useEffect(() => {
     async function load() {
       let resolvedMissionId = missionIdParam
+      let resolvedExtraData: Record<string, unknown> | undefined
 
       if (!resolvedMissionId) {
         const todayMission = await getTodayMission()
         if (todayMission?.date === today) {
           resolvedMissionId = todayMission.missionId
-          setExtraData(todayMission.extraData)
+          resolvedExtraData = todayMission.extraData
         }
       } else {
-        // Load extraData from today's mission if available
+        // Load extraData from today's mission if IDs match
         const todayMission = await getTodayMission()
         if (todayMission?.missionId === resolvedMissionId) {
-          setExtraData(todayMission.extraData)
+          resolvedExtraData = todayMission.extraData
         }
       }
 
@@ -79,6 +80,17 @@ export default function Write() {
         }
         setJournal(existingJournal)
         setContent(existingJournal.content ?? '')
+        // BUG-6: fall back to journal's own extraData when today-mission lookup yielded nothing
+        if (!resolvedExtraData && existingJournal.extraData) {
+          resolvedExtraData = existingJournal.extraData
+        }
+      } else if (foundMission.template) {
+        // FEAT-1: pre-fill with template only when no draft exists
+        setContent(foundMission.template)
+      }
+
+      if (resolvedExtraData) {
+        setExtraData(resolvedExtraData)
       }
 
       setLoading(false)
@@ -97,10 +109,11 @@ export default function Write() {
       status: 'draft',
       createdAt: journal?.createdAt ?? new Date().toISOString(),
       completedAt: null,
+      extraData: extraData ?? undefined,
     }
     await saveJournal(entry)
     setJournal(entry)
-  }, [mission, targetDate, journal])
+  }, [mission, targetDate, journal, extraData])
 
   const autoSaveDraftRef = useRef(autoSaveDraft)
   useEffect(() => {
@@ -133,13 +146,14 @@ export default function Write() {
       status: 'completed',
       createdAt: journal?.createdAt ?? new Date().toISOString(),
       completedAt: new Date().toISOString(),
+      extraData: extraData ?? undefined,
     }
     await saveJournal(entry)
     setSaving(false)
     setSaved(true)
     setCompleted(true)
     setTimeout(() => setSaved(false), 2000)
-  }, [mission, targetDate, content, journal])
+  }, [mission, targetDate, content, journal, extraData])
 
   const handleCanvasSave = useCallback(
     (dataUrl: string) => {
@@ -194,7 +208,7 @@ export default function Write() {
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
       <div
-        className="sticky top-0 z-30 border-b px-4 py-3 flex items-center justify-between gap-4"
+        className="sticky top-0 z-50 border-b px-4 py-3 flex items-center justify-between gap-4"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -301,6 +315,21 @@ export default function Write() {
           >
             {mission.description}
           </div>
+
+          {/* creative-1 inspiration card */}
+          {mission.id === 'creative-1' && typeof extraData?.inspirationCard === 'string' && (
+            <div
+              className="mb-4 p-4 rounded-xl text-sm italic"
+              style={{
+                background: 'var(--color-bg)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-accent)',
+              }}
+            >
+              <span className="text-xs not-italic opacity-60 block mb-1">✨ 오늘의 영감 카드</span>
+              &ldquo;{extraData.inspirationCard}&rdquo;
+            </div>
+          )}
 
           {/* Render correct editor */}
           {isTrash && (

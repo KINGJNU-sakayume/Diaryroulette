@@ -25,6 +25,7 @@ export interface JournalEntry {
   status: 'completed' | 'draft'
   createdAt: string // ISO
   completedAt: string | null
+  extraData?: Record<string, unknown>
 }
 
 // ─── DB singleton ─────────────────────────────────────────────────────────────
