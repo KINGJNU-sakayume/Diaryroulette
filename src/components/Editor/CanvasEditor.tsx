@@ -9,6 +9,7 @@ interface CanvasEditorProps {
 
 const CANVAS_WIDTH = 800
 const CANVAS_HEIGHT = 450
+const CANVAS_BG = CANVAS_BG
 const COLORS = ['#e6edf3', '#ef4444', '#f97316', '#facc15', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6']
 
 export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = false }: CanvasEditorProps) {
@@ -32,7 +33,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    ctx.fillStyle = '#0d1117'
+    ctx.fillStyle = CANVAS_BG
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
 
     if (initialDataUrl) {
@@ -64,7 +65,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
 
     ctx.beginPath()
     ctx.arc(pos.x, pos.y, (tool === 'eraser' ? brushSize * 2 : brushSize) / 2, 0, Math.PI * 2)
-    ctx.fillStyle = tool === 'eraser' ? '#0d1117' : color
+    ctx.fillStyle = tool === 'eraser' ? CANVAS_BG : color
     ctx.fill()
   }, [tool, color, brushSize, getPos])
 
@@ -78,7 +79,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     ctx.beginPath()
     ctx.moveTo(last.x, last.y)
     ctx.lineTo(pos.x, pos.y)
-    ctx.strokeStyle = tool === 'eraser' ? '#0d1117' : color
+    ctx.strokeStyle = tool === 'eraser' ? CANVAS_BG : color
     ctx.lineWidth = tool === 'eraser' ? brushSize * 2 : brushSize
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
@@ -98,7 +99,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = '#0d1117'
+    ctx.fillStyle = CANVAS_BG
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
     if (onSave) onSave(canvas.toDataURL('image/jpeg', 0.85))
   }, [onSave])

@@ -9,11 +9,11 @@ interface EmojiEditorProps {
 const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
   {
     label: '감정',
-    emojis: ['😀', '😂', '🥲', '😊', '😌', '😔', '😞', '😢', '😭', '😤', '😡', '🥺', '😳', '🫠', '😶', '🤔', '😴', '🥱', '😇', '🥰', '😍', '🤩', '🫡', '🥳'],
+    emojis: ['😀', '😂', '😅', '😊', '😌', '😔', '😞', '😢', '😭', '😤', '😡', '🥺', '😳', '😵', '😶', '🤔', '😴', '🥱', '😇', '🥰', '😍', '🤩', '🙄', '🥳'],
   },
   {
     label: '신체',
-    emojis: ['👋', '🤝', '👍', '👎', '✌️', '🤞', '🫶', '❤️', '💔', '💪', '🦾', '🦵', '👁️', '👂', '🫀', '🧠'],
+    emojis: ['👋', '🤝', '👍', '👎', '✌️', '🤞', '🤗', '❤️', '💔', '💪', '🦾', '🦵', '👁️', '👂', '💓', '🧠'],
   },
   {
     label: '자연',
@@ -95,7 +95,7 @@ export default function EmojiEditor({ value, onChange }: EmojiEditorProps) {
       />
 
       <p className="text-xs text-slate-500 text-center">
-        {value.length}개의 이모티콘
+        {[...value].length}개의 이모티콘
       </p>
 
       {/* Emoji picker */}

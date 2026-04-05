@@ -79,29 +79,33 @@ export default function TimedTextEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Timer display — raised above blackout overlay so reveal button remains visible */}
-      <div
-        className={`flex items-center justify-between p-4 rounded-xl border${isBlackout && !revealed ? ' relative z-50' : ''}`}
-        style={{ background: '#161b22', borderColor: '#30363d' }}
-      >
-        <div className="flex items-center gap-3">
-          <Timer className="w-5 h-5 text-amber-400" />
-          <span
-            className="text-2xl font-mono font-bold tabular-nums"
-            style={{
-              color: isTimeUp ? '#ef4444' : isCountdown && timeRemaining < 10 ? '#f97316' : '#e6edf3',
-            }}
-          >
-            {formatTime(timeRemaining)}
-          </span>
-          {!started && (
-            <span className="text-xs text-slate-500">첫 타이핑 시 시작됩니다</span>
-          )}
-          {isTimeUp && <span className="text-xs text-red-400 animate-pulse">시간 종료!</span>}
+      {/* Timer display — hidden when showTimer is false */}
+      {mission.showTimer !== false && (
+        <div
+          className={`flex items-center justify-between p-4 rounded-xl border${isBlackout && !revealed ? ' relative z-50' : ''}`}
+          style={{ background: '#161b22', borderColor: '#30363d' }}
+        >
+          <div className="flex items-center gap-3">
+            <Timer className="w-5 h-5 text-amber-400" />
+            <span
+              className="text-2xl font-mono font-bold tabular-nums"
+              style={{
+                color: isTimeUp ? '#ef4444' : isCountdown && timeRemaining < 10 ? '#f97316' : '#e6edf3',
+              }}
+            >
+              {formatTime(timeRemaining)}
+            </span>
+            {!started && (
+              <span className="text-xs text-slate-500">첫 타이핑 시 시작됩니다</span>
+            )}
+            {isTimeUp && <span className="text-xs text-red-400 animate-pulse">시간 종료!</span>}
+          </div>
         </div>
+      )}
 
-        {/* Blackout toggle */}
-        {isBlackout && (
+      {/* Blackout toggle — standalone row, visible even when timer is hidden */}
+      {isBlackout && (
+        <div className="flex justify-end relative z-50">
           <button
             type="button"
             onClick={() => setRevealed((r) => !r)}
@@ -111,8 +115,8 @@ export default function TimedTextEditor({
             {revealed ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
             {revealed ? '가리기' : '미리보기'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* charMin progress bar */}
       {charMin && (
