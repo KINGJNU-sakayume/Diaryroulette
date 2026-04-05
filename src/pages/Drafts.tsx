@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, PenLine, Trash2 } from 'lucide-react'
+import BottomTabBar from '../components/shared/BottomTabBar'
 import { getJournalsByStatus, deleteJournal, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
 import { getLocalDateString } from '../hooks/useTodayMission'
@@ -62,7 +63,7 @@ export default function Drafts() {
         className="safe-top sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
-        <Link to="/" className="p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
+        <Link to="/" className="hidden md:flex p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h1 className="text-lg font-bold font-serif" style={{ color: 'var(--color-text)' }}>임시저장</h1>
@@ -84,7 +85,7 @@ export default function Drafts() {
         </button>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="max-w-2xl mx-auto px-4 py-6 pb-tab-bar">
         {drafts.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>임시저장된 일기가 없습니다.</p>
@@ -162,6 +163,7 @@ export default function Drafts() {
           </div>
         )}
       </div>
+      <BottomTabBar />
     </div>
   )
 }

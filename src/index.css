@@ -77,6 +77,11 @@ mark { color: inherit; }
   background-color: var(--color-card);
 }
 
+/* Prevents content from being hidden behind the fixed bottom tab bar on mobile */
+.pb-tab-bar {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

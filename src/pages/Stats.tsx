@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import BottomTabBar from '../components/shared/BottomTabBar'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { useCooldown } from '../hooks/useCooldown'
 import { missions, CATEGORY_COLORS, CATEGORY_LABELS, type MissionCategory } from '../data/missions'
@@ -55,7 +56,7 @@ export default function Stats() {
         className="safe-top sticky top-0 z-10 border-b px-4 py-3 flex items-center gap-3"
         style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
       >
-        <Link to="/" className="p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
+        <Link to="/" className="hidden md:flex p-1.5 rounded-lg hover-surface transition-colors" style={{ color: 'var(--color-text-mid)' }}>
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h1 className="text-lg font-bold font-serif" style={{ color: 'var(--color-text)' }}>통계</h1>
@@ -78,7 +79,7 @@ export default function Stats() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6 pb-tab-bar">
         {/* Donut chart */}
         <Section title="카테고리별 완료">
           <DonutChart categoryCount={categoryCount} total={completedCount} />
@@ -178,6 +179,7 @@ export default function Stats() {
           <DataManagement />
         </Section>
       </div>
+      <BottomTabBar />
     </div>
   )
 }
