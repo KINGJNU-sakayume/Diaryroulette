@@ -23,6 +23,8 @@ function offsetDate(days: number): string {
 
 const SAMPLE_LANG2_TEXT = '오늘 하루가 있었다. 피곤함이 있다. 기분이 좋지 않은 상태이다. 모든 것이 뒤엉켜 있다.'
 const SAMPLE_TIME3_TEXT = '오늘 하루는 아침부터 저녁까지 정말 많은 일들이 있었고 그 모든 순간들이 머릿속을 가득 채우고 있어서 무척이나 복잡한 마음이다.'
+const SAMPLE_LANG8_TEXT = '나는 가고 싶다. 달리기를 라디오를 마음껏 바라보며 아침부터.'
+const SAMPLE_TIME8_TEXT = '오늘 하루는 아침부터 유독 바빴다. 출근길에 놓친 버스 한 대가 이미 하루의 시작을 알렸다. 점심은 편의점 도시락으로 빠르게 해결했고, 오후에는 회의가 두 개나 있었다. 그래도 퇴근 후 집에 돌아오면 따뜻한 국물 한 그릇이 기다리고 있다는 생각 하나로 버텼다. 오늘도 수고했다.'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -332,6 +334,14 @@ export default function DevReviewPanel() {
                 label="time-3: pre-fill 110+ chars → verify overflow"
                 onClick={() => run(() => openWithPrefilledText('time-3', SAMPLE_TIME3_TEXT).then(() => setOpen(false)), 'time-3 prefill')}
               />
+              <ActionButton
+                label="lang-8: pre-fill word consonant order → verify red on 나는"
+                onClick={() => run(() => openWithPrefilledText('lang-8', SAMPLE_LANG8_TEXT).then(() => setOpen(false)), 'lang-8 prefill')}
+              />
+              <ActionButton
+                label="time-8: pre-fill ~280 chars → verify under-300 indicator"
+                onClick={() => run(() => openWithPrefilledText('time-8', SAMPLE_TIME8_TEXT).then(() => setOpen(false)), 'time-8 prefill')}
+              />
             </PanelSection>
 
             <PanelSection title="🗄️ Data & Navigation">
@@ -348,7 +358,7 @@ export default function DevReviewPanel() {
                 onClick={() => run(verifyArchiveRedirect, 'Archive redirect')}
               />
               <ActionButton
-                label="Fill cycle: 36 completed entries"
+                label={`Fill cycle: ${missions.length} completed entries`}
                 onClick={() => run(fillCycle, 'Fill cycle')}
               />
               <ActionButton
