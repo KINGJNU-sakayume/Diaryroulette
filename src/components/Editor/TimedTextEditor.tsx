@@ -24,7 +24,7 @@ export default function TimedTextEditor({
   mission,
   extraData,
 }: TimedTextEditorProps) {
-  const isBlackout = mission.id === 'time-6'
+  const isBlackout = mission.id === 'time-5'
   const timerSeconds = mission.timerSeconds ?? null
   const isCountdown = timerSeconds !== null
   const charMin = mission.charLimit?.min ?? null

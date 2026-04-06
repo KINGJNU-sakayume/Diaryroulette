@@ -315,7 +315,7 @@ export default function DevReviewPanel() {
               <ActionButton label="canvas editor (visual-1)" onClick={() => { openEditor('visual-1'); setOpen(false) }} />
               <ActionButton label="emoji-only editor (visual-2)" onClick={() => { openEditor('visual-2'); setOpen(false) }} />
               <ActionButton label="trash editor + shred (creative-8)" onClick={() => { openEditor('creative-8'); setOpen(false) }} />
-              <ActionButton label="blackout editor (time-6)" onClick={() => { openEditor('time-6'); setOpen(false) }} />
+              <ActionButton label="blackout editor (time-5)" onClick={() => { openEditor('time-5'); setOpen(false) }} />
               <ActionButton label="emotion temperature canvas (visual-5)" onClick={() => { openEditor('visual-5'); setOpen(false) }} />
             </PanelSection>
 
