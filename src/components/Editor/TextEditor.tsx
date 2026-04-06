@@ -145,7 +145,7 @@ function getHighlights(
         ranges.push({ start: actualStart, end: wordEnd, color: '#ff4d4d' })
       }
     })
-  } else if (missionId === 'time-5') {
+  } else if (missionId === 'lang-8') {
     // Word-level: every Korean word's first syllable must follow ㄱ→ㄴ→ㄷ…
     let wordIdx = 0
     const wordPattern = /[가-힣]+/g
@@ -234,7 +234,7 @@ interface TextEditorProps {
 
 // ─── Missions that need soft highlighting ─────────────────────────────────────
 
-const HIGHLIGHT_MISSIONS = new Set(['lang-1', 'lang-2', 'lang-3', 'lang-4', 'lang-5', 'lang-6', 'time-3', 'time-5', 'creative-2'])
+const HIGHLIGHT_MISSIONS = new Set(['lang-1', 'lang-2', 'lang-3', 'lang-4', 'lang-5', 'lang-6', 'lang-8', 'time-3', 'creative-2'])
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -283,7 +283,7 @@ export default function TextEditor({
     onChange(val)
   }, [missionId, onChange])
 
-  // Next expected consonant for time-5/lang-6 hint
+  // Next expected consonant for lang-8/lang-6 hint
   const nextConsonant = useMemo(() => {
     if (missionId === 'lang-6') {
       // Count only segments (between terminators) that contain at least one Korean syllable
@@ -298,7 +298,7 @@ export default function TextEditor({
       }
       return KOREAN_CONSONANTS[validSentences % KOREAN_CONSONANTS.length]
     }
-    if (missionId === 'time-5') {
+    if (missionId === 'lang-8') {
       const wordCount = (value.match(/[가-힣]+/g) || []).length
       return KOREAN_CONSONANTS[wordCount % KOREAN_CONSONANTS.length]
     }
@@ -326,8 +326,8 @@ export default function TextEditor({
         </div>
       )}
 
-      {/* Consonant order hint for time-5/lang-6 */}
-      {(missionId === 'time-5' || missionId === 'lang-6') && (
+      {/* Consonant order hint for lang-8/lang-6 */}
+      {(missionId === 'lang-8' || missionId === 'lang-6') && (
         <div
           className="text-xs rounded-lg px-3 py-2"
           style={{

@@ -16,7 +16,7 @@ export interface Mission {
 }
 
 export const missions: Mission[] = [
-  // ── lang — Language Deconstruction (7) ──────────────────────────────────────
+  // ── lang — Language Deconstruction (9) ──────────────────────────────────────
   {
     id: 'lang-1',
     category: 'lang',
@@ -72,6 +72,25 @@ export const missions: Mission[] = [
     description: '오늘 하루를 한국어가 아닌 외국어로만 기록하세요. 어떤 언어든 괜찮습니다.',
     editorType: 'text',
     rules: ['한국어 사용 금지', '외국어(영어, 일본어, 프랑스어 등)만 사용'],
+  },
+  {
+    id: 'lang-8',
+    category: 'lang',
+    title: '단어마다 초성 순서 지키기',
+    description: '모든 단어의 첫 글자를 ㄱ, ㄴ, ㄷ, ㄹ, ㅁ… 순서로 이어가며 일기를 써 보세요. 문장 단위인 lang-6보다 훨씬 엄격합니다.',
+    editorType: 'text',
+    rules: ['모든 한국어 단어의 첫 글자 초성이 ㄱ→ㄴ→ㄷ→… 순서를 따라야 함'],
+  },
+  {
+    id: 'lang-9',
+    category: 'lang',
+    title: '세 글자의 마법',
+    description: '모든 띄어쓰기 단위(어절)를 정확히 세 글자로만 작성하세요. (예: 오늘은, 날씨가, 참으로, 좋았다)',
+    editorType: 'text',
+    rules: [
+      '모든 띄어쓰기 단위(어절)가 정확히 3글자여야 함',
+      '특수기호 포함 3글자 초과/미만 금지',
+    ],
   },
 
   // ── view — Perspective Shift (7) ────────────────────────────────────────────
@@ -163,14 +182,6 @@ export const missions: Mission[] = [
   },
   {
     id: 'time-5',
-    category: 'lang',
-    title: '단어마다 초성 순서 지키기',
-    description: '모든 단어의 첫 글자를 ㄱ, ㄴ, ㄷ, ㄹ, ㅁ… 순서로 이어가며 일기를 써 보세요. 문장 단위인 lang-6보다 훨씬 엄격합니다.',
-    editorType: 'text',
-    rules: ['모든 한국어 단어의 첫 글자 초성이 ㄱ→ㄴ→ㄷ→… 순서를 따라야 함'],
-  },
-  {
-    id: 'time-6',
     category: 'time',
     title: '블랙아웃 시 쓰기',
     description: '화면이 완전히 어두워진 상태에서 써야 합니다. 무엇을 쓰는지 볼 수 없습니다. 저장할 때 비로소 내용이 드러납니다.',
@@ -178,22 +189,30 @@ export const missions: Mission[] = [
     showTimer: false,
   },
   {
-    id: 'time-7',
+    id: 'time-6',
     category: 'time',
     title: '하루 세 줄 일기',
     description: '딱 세 줄만 씁니다: 오늘의 사실, 오늘의 감정, 오늘의 배움.',
     editorType: 'text',
   },
   {
-    id: 'time-8',
+    id: 'time-7',
     category: 'time',
     title: '5분 논스톱 라이팅',
     description: '5분 동안 멈추지 말고 계속 쓰세요. 타이머가 끝날 때까지 손을 떼지 마세요.',
     editorType: 'timed-text',
     timerSeconds: 300,
   },
+  {
+    id: 'time-8',
+    category: 'time',
+    title: '정확히 300자 맞추기',
+    description: '정확히 300자를 채워서 일기를 완성하세요. 299자도, 301자도 안 됩니다. 완벽하게 글자 수를 통제해 보세요.',
+    editorType: 'text',
+    charLimit: { min: 300, max: 300 },
+  },
 
-  // ── visual — Non-verbal / Visual (6) ────────────────────────────────────────
+  // ── visual — Non-verbal / Visual (8) ────────────────────────────────────────
   {
     id: 'visual-1',
     category: 'visual',
@@ -236,8 +255,22 @@ export const missions: Mission[] = [
     description: '원, 삼각형, 사각형 등 기하학적 도형만으로 오늘 하루의 구조와 흐름을 표현하세요.',
     editorType: 'canvas',
   },
+  {
+    id: 'visual-7',
+    category: 'visual',
+    title: '단일 색상의 농담',
+    description: '오늘 하루를 지배한 감정의 색을 딱 하나만 고르세요. 캔버스에는 오직 그 색상의 명도와 채도 차이만을 이용해서 오늘을 표현해야 합니다.',
+    editorType: 'canvas',
+  },
+  {
+    id: 'visual-8',
+    category: 'visual',
+    title: '하루의 보물지도 그리기',
+    description: '오늘 하루 동안 이동한 경로나 감정의 흐름을 선과 간단한 기호로 이루어진 지도 형태로 그려보세요.',
+    editorType: 'canvas',
+  },
 
-  // ── creative — Cognitive Detour (8) ─────────────────────────────────────────
+  // ── creative — Cognitive Detour (10) ────────────────────────────────────────
   {
     id: 'creative-1',
     category: 'creative',
@@ -296,6 +329,21 @@ export const missions: Mission[] = [
     description: '모든 문장을 "왜인지 모르겠지만…"으로 시작하세요.',
     editorType: 'trash',
     rules: ['모든 문장이 "왜인지 모르겠지만…"으로 시작해야 함'],
+  },
+  {
+    id: 'creative-9',
+    category: 'creative',
+    title: '완벽한 거짓말 일기',
+    description: '오늘 일어난 일들을 모두 반대로 쓰거나, 완전히 지어낸 허구의 사건들로만 하루를 채워보세요. 진실은 단 한 줄도 없어야 합니다.',
+    editorType: 'text',
+    rules: ['오늘 일어난 실제 사건 기록 금지'],
+  },
+  {
+    id: 'creative-10',
+    category: 'creative',
+    title: '비밀번호를 까먹은 사람처럼',
+    description: '머릿속에 있는 중요한 단어나 핵심 사건이 생각나지 않아 그것을 빙빙 돌려 설명하는 방식으로 일기를 쓰세요.',
+    editorType: 'text',
   },
 ]
 
