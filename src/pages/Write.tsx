@@ -33,6 +33,8 @@ export default function Write() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [completed, setCompleted] = useState(false)
+  const completedRef = useRef(false)
+  useEffect(() => { completedRef.current = completed }, [completed])
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const contentRef = useRef(content)
   useEffect(() => {
@@ -125,7 +127,7 @@ export default function Write() {
     if (!mission || loading) return
 
     autoSaveRef.current = setInterval(async () => {
-      if (contentRef.current) {
+      if (contentRef.current && !completedRef.current) {
         await autoSaveDraftRef.current()
       }
     }, AUTO_SAVE_MS)

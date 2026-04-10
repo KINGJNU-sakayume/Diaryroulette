@@ -34,7 +34,7 @@ export default function SlotMachinePicker({
   isSpinning,
   onSpinComplete,
 }: SlotMachinePickerProps) {
-  const [translateY, setTranslateY] = useState(0)
+  const [translateY, setTranslateY] = useState(CENTER_ROW * ROW_HEIGHT)
   const [phase, setPhase] = useState<'idle' | 'spinning' | 'done'>('idle')
   const [centeredIndex, setCenteredIndex] = useState<number>(-1) // drum index of centered item
   const { theme } = useTheme()
@@ -78,16 +78,27 @@ export default function SlotMachinePicker({
           // Land exactly on finalY
           setTranslateY(endYRef.current)
           setCenteredIndex(finalDrumIndex)
-          // Bounce: +4px then back
           setPhase('done')
-          // Apply bounce via a small translateY nudge
-          requestAnimationFrame(() => {
-            setTranslateY(endYRef.current + 4)
-            setTimeout(() => {
-              setTranslateY(endYRef.current)
+          // Bounce: drive +4px overshoot and return over 150ms via rAF loop
+          const baseY = endYRef.current
+          const bounceDuration = 150
+          let bounceStartTime: number | null = null
+          function bounceFrame(timestamp: number) {
+            if (bounceStartTime === null) bounceStartTime = timestamp
+            const elapsed = timestamp - bounceStartTime
+            const t = Math.min(elapsed / bounceDuration, 1)
+            const offset = t < 0.5
+              ? 4 * (t / 0.5)
+              : 4 * (1 - (t - 0.5) / 0.5)
+            setTranslateY(baseY + offset)
+            if (t < 1) {
+              rafRef.current = requestAnimationFrame(bounceFrame)
+            } else {
+              setTranslateY(baseY)
               onSpinCompleteRef.current()
-            }, 150)
-          })
+            }
+          }
+          rafRef.current = requestAnimationFrame(bounceFrame)
         }
       }
 
