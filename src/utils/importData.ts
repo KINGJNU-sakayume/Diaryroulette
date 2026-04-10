@@ -24,8 +24,11 @@ export function validateExportData(raw: unknown): ValidationResult {
   if (!Array.isArray(obj.journals)) {
     return { valid: false }
   }
+  if (typeof obj.missions !== 'object' || obj.missions === null) {
+    return { valid: false }
+  }
   const missionsObj = obj.missions as Record<string, unknown>
-  if (typeof missionsObj !== 'object' || missionsObj === null) {
+  if (!Array.isArray(missionsObj.cooldownList)) {
     return { valid: false }
   }
 

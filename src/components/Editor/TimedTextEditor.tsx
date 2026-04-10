@@ -68,13 +68,12 @@ export default function TimedTextEditor({
 
   const handleChange = useCallback(
     (val: string) => {
-      if (!started) startTimer()
       if (charMin && val.length >= charMin) {
         setCelebrated(true)
       }
       onChange(val)
     },
-    [started, startTimer, onChange, charMin],
+    [onChange, charMin],
   )
 
   return (

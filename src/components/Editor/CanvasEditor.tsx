@@ -41,7 +41,8 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
       img.onload = () => ctx.drawImage(img, 0, 0)
       img.src = initialDataUrl
     }
-  }, [initialDataUrl])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const getPos = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!

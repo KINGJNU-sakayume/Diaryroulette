@@ -40,7 +40,7 @@ const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
 // Strip non-emoji characters from input
 function filterEmoji(str: string): string {
   // Regex matches emoji sequences (including ZWJ sequences, modifiers, etc.)
-  const emojiRegex = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}(?:\p{Emoji_Modifier})?|\p{Emoji_Component}+/gu
+  const emojiRegex = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}(?:\p{Emoji_Modifier})?/gu
   return (str.match(emojiRegex) ?? []).join('')
 }
 
@@ -95,7 +95,7 @@ export default function EmojiEditor({ value, onChange }: EmojiEditorProps) {
       />
 
       <p className="text-xs text-slate-500 text-center">
-        {[...value].length}개의 이모티콘
+        {Array.from(new Intl.Segmenter().segment(value)).length}개의 이모티콘
       </p>
 
       {/* Emoji picker */}

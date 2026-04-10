@@ -353,31 +353,36 @@ function DonutChart({
 
   const categories = Object.keys(categoryCount) as MissionCategory[]
   let cumulative = 0
-  const slices: Array<{ path: string; color: string }> = []
+  const slices: Array<{ path?: string; isFullCircle?: boolean; color: string }> = []
 
   const toRad = (deg: number) => (deg * Math.PI) / 180
   const R = r
   const IR = innerR
   const strokeW = R - IR
+  const midR = (R + IR) / 2
 
   for (const cat of categories) {
     const count = categoryCount[cat]
     if (count === 0) continue
     const frac = count / total
-    const startAngle = cumulative * 360 - 90
-    const endAngle = (cumulative + frac) * 360 - 90
-    const large = frac > 0.5 ? 1 : 0
 
-    const midR = (R + IR) / 2
-    const x1 = cx + midR * Math.cos(toRad(startAngle))
-    const y1 = cy + midR * Math.sin(toRad(startAngle))
-    const x2 = cx + midR * Math.cos(toRad(endAngle))
-    const y2 = cy + midR * Math.sin(toRad(endAngle))
+    if (frac === 1) {
+      slices.push({ isFullCircle: true, color: CATEGORY_COLORS[cat].bg })
+    } else {
+      const startAngle = cumulative * 360 - 90
+      const endAngle = (cumulative + frac) * 360 - 90
+      const large = frac > 0.5 ? 1 : 0
 
-    slices.push({
-      path: `M ${x1} ${y1} A ${midR} ${midR} 0 ${large} 1 ${x2} ${y2}`,
-      color: CATEGORY_COLORS[cat].bg,
-    })
+      const x1 = cx + midR * Math.cos(toRad(startAngle))
+      const y1 = cy + midR * Math.sin(toRad(startAngle))
+      const x2 = cx + midR * Math.cos(toRad(endAngle))
+      const y2 = cy + midR * Math.sin(toRad(endAngle))
+
+      slices.push({
+        path: `M ${x1} ${y1} A ${midR} ${midR} 0 ${large} 1 ${x2} ${y2}`,
+        color: CATEGORY_COLORS[cat].bg,
+      })
+    }
     cumulative += frac
   }
 
@@ -388,22 +393,34 @@ function DonutChart({
         <circle
           cx={cx}
           cy={cy}
-          r={(R + IR) / 2}
+          r={midR}
           fill="none"
           stroke="var(--color-card)"
           strokeWidth={strokeW}
         />
         {/* Slices */}
-        {slices.map((slice, i) => (
-          <path
-            key={i}
-            d={slice.path}
-            fill="none"
-            stroke={slice.color}
-            strokeWidth={strokeW - 2}
-            strokeLinecap="round"
-          />
-        ))}
+        {slices.map((slice, i) =>
+          slice.isFullCircle ? (
+            <circle
+              key={i}
+              cx={cx}
+              cy={cy}
+              r={midR}
+              fill="none"
+              stroke={slice.color}
+              strokeWidth={strokeW - 2}
+            />
+          ) : (
+            <path
+              key={i}
+              d={slice.path!}
+              fill="none"
+              stroke={slice.color}
+              strokeWidth={strokeW - 2}
+              strokeLinecap="round"
+            />
+          )
+        )}
         {/* Center text */}
         <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" fontSize="20" fontWeight="bold" fill="var(--color-text)">
           {total}
