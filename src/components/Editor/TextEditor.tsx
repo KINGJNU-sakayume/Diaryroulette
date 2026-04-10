@@ -377,10 +377,10 @@ export default function TextEditor({
           <div
             ref={overlayRef}
             aria-hidden="true"
-            className="absolute inset-px p-4 pointer-events-none overflow-hidden whitespace-pre-wrap break-words text-sm leading-relaxed rounded-xl"
+            className="absolute inset-px p-4 pointer-events-none overflow-hidden whitespace-pre-wrap break-words leading-relaxed rounded-xl"
             style={{
               fontFamily: 'inherit',
-              fontSize: '0.875rem',
+              fontSize: '16px',
               lineHeight: '1.625',
               color: 'var(--color-text)',
               zIndex: 3,
