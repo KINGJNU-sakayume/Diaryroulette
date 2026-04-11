@@ -55,6 +55,9 @@ export default function TimedTextEditor({
     }
   }, [])
 
+  const timeRemaining = isCountdown ? (timerSeconds ?? 0) - elapsed : elapsed
+  const isTimeUp = isCountdown && elapsed >= (timerSeconds ?? 0)
+
   // Stop interval when time is up
   useEffect(() => {
     if (isTimeUp && intervalRef.current) {
@@ -62,9 +65,6 @@ export default function TimedTextEditor({
       intervalRef.current = null
     }
   }, [isTimeUp])
-
-  const timeRemaining = isCountdown ? (timerSeconds ?? 0) - elapsed : elapsed
-  const isTimeUp = isCountdown && elapsed >= (timerSeconds ?? 0)
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

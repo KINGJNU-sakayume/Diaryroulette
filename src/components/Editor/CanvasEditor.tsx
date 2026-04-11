@@ -24,7 +24,6 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
   // Emotion temperature sliders (visual-5)
   const [intensity, setIntensity] = useState(50)  // 0–100 → radius 5–60
   const [hue, setHue] = useState(200)             // 0–360 → HSL color
-  const [previewVisible, setPreviewVisible] = useState(false)
   const [pendingClick, setPendingClick] = useState<{ x: number; y: number } | null>(null)
 
   // Initialize canvas
@@ -128,7 +127,6 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     ctx.fill()
     ctx.stroke()
 
-    setPreviewVisible(false)
     setPendingClick(null)
     if (onSave) onSave(canvas.toDataURL('image/jpeg', 0.85))
   }, [intensity, hue, pendingClick, onSave])
@@ -258,7 +256,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
                 min={0}
                 max={100}
                 value={intensity}
-                onChange={(e) => { setIntensity(Number(e.target.value)); setPreviewVisible(true) }}
+                onChange={(e) => setIntensity(Number(e.target.value))}
                 className="w-full"
               />
             </div>
@@ -280,7 +278,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
               min={0}
               max={360}
               value={hue}
-              onChange={(e) => { setHue(Number(e.target.value)); setPreviewVisible(true) }}
+              onChange={(e) => setHue(Number(e.target.value))}
               className="w-full"
               style={{
                 background: `linear-gradient(to right, hsl(240,80%,60%), hsl(180,80%,60%), hsl(120,80%,60%), hsl(60,80%,60%), hsl(0,80%,60%))`,
