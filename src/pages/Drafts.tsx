@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { PenLine, Trash2 } from 'lucide-react'
 import { getJournalsByStatus, deleteJournal, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
@@ -13,10 +13,12 @@ export default function Drafts() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [hasTodayDraft, setHasTodayDraft] = useState(false)
 
   const loadDrafts = useCallback(() => {
     getJournalsByStatus('draft')
       .then((list) => {
+        setHasTodayDraft(list.some((j) => j.id === today && j.status === 'draft'))
         // Exclude today — today's draft is shown on the Write page
         const past = list
           .filter((j) => j.id !== today)
@@ -56,6 +58,15 @@ export default function Drafts() {
   return (
     <div>
       <div className="max-w-2xl mx-auto px-4 py-6">
+        {hasTodayDraft && (
+          <div
+            className="text-sm mb-4 p-3 rounded-lg flex items-center justify-between gap-2"
+            style={{ background: 'var(--color-card)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}
+          >
+            <span>오늘의 미션은 홈에서 이어쓸 수 있어요</span>
+            <Link to="/" style={{ color: 'var(--color-accent)', whiteSpace: 'nowrap' }}>홈으로 가기</Link>
+          </div>
+        )}
         {drafts.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>임시저장된 일기가 없습니다.</p>

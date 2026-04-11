@@ -26,6 +26,11 @@ export default function Archive() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    document.body.style.overflow = modal ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [modal])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>

@@ -16,6 +16,7 @@ interface TimedTextEditorProps {
   onChange: (val: string) => void
   mission: Mission
   extraData?: Record<string, unknown>
+  onTimerReady?: (canComplete: boolean) => void
 }
 
 export default function TimedTextEditor({
@@ -23,6 +24,7 @@ export default function TimedTextEditor({
   onChange,
   mission,
   extraData,
+  onTimerReady,
 }: TimedTextEditorProps) {
   const isBlackout = mission.id === 'time-5'
   const timerSeconds = mission.timerSeconds ?? null
@@ -40,10 +42,11 @@ export default function TimedTextEditor({
   const startTimer = useCallback(() => {
     if (started) return
     setStarted(true)
+    onTimerReady?.(true)
     intervalRef.current = setInterval(() => {
       setElapsed((e) => e + 1)
     }, 1000)
-  }, [started])
+  }, [started, onTimerReady])
 
   // Clean up on unmount
   useEffect(() => {
@@ -51,6 +54,14 @@ export default function TimedTextEditor({
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [])
+
+  // Stop interval when time is up
+  useEffect(() => {
+    if (isTimeUp && intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [isTimeUp])
 
   const timeRemaining = isCountdown ? (timerSeconds ?? 0) - elapsed : elapsed
   const isTimeUp = isCountdown && elapsed >= (timerSeconds ?? 0)
@@ -152,6 +163,7 @@ export default function TimedTextEditor({
           extraData={extraData}
           charLimit={mission.charLimit}
           onKeyDown={handleKeyDown}
+          readOnly={isTimeUp}
           forceInvisible={isBlackout && !revealed}
           placeholder={
             isBlackout

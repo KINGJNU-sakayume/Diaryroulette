@@ -25,6 +25,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
   const [intensity, setIntensity] = useState(50)  // 0–100 → radius 5–60
   const [hue, setHue] = useState(200)             // 0–360 → HSL color
   const [previewVisible, setPreviewVisible] = useState(false)
+  const [pendingClick, setPendingClick] = useState<{ x: number; y: number } | null>(null)
 
   // Initialize canvas
   useEffect(() => {
@@ -56,6 +57,12 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
   }, [])
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (isEmotionTemp) {
+      const pos = getPos(e)
+      setPendingClick({ x: pos.x, y: pos.y })
+      return
+    }
+
     e.currentTarget.setPointerCapture(e.pointerId)
     isDrawing.current = true
     lastPos.current = getPos(e)
@@ -68,7 +75,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     ctx.arc(pos.x, pos.y, (tool === 'eraser' ? brushSize * 2 : brushSize) / 2, 0, Math.PI * 2)
     ctx.fillStyle = tool === 'eraser' ? CANVAS_BG : color
     ctx.fill()
-  }, [tool, color, brushSize, getPos])
+  }, [isEmotionTemp, tool, color, brushSize, getPos])
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing.current) return
@@ -111,9 +118,10 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     const ctx = canvas.getContext('2d')!
     const radius = 5 + (intensity / 100) * 55
     const emotionColor = `hsl(${hue}, 80%, 60%)`
+    const center = pendingClick ?? { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }
 
     ctx.beginPath()
-    ctx.arc(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, radius, 0, Math.PI * 2)
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2)
     ctx.fillStyle = emotionColor + '99'
     ctx.strokeStyle = emotionColor
     ctx.lineWidth = 2
@@ -121,8 +129,9 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     ctx.stroke()
 
     setPreviewVisible(false)
+    setPendingClick(null)
     if (onSave) onSave(canvas.toDataURL('image/jpeg', 0.85))
-  }, [intensity, hue, onSave])
+  }, [intensity, hue, pendingClick, onSave])
 
   const emotionColor = `hsl(${hue}, 80%, 60%)`
   const emotionRadius = 5 + (intensity / 100) * 55
@@ -219,7 +228,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
         />
 
         {/* Emotion temp preview circle */}
-        {isEmotionTemp && previewVisible && (
+        {isEmotionTemp && pendingClick && (
           <div
             className="absolute pointer-events-none rounded-full border-2"
             style={{
@@ -227,8 +236,8 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
               height: emotionRadius * 2,
               background: emotionColor + '66',
               borderColor: emotionColor,
-              left: '50%',
-              top: '50%',
+              left: `${(pendingClick.x / CANVAS_WIDTH) * 100}%`,
+              top: `${(pendingClick.y / CANVAS_HEIGHT) * 100}%`,
               transform: 'translate(-50%, -50%)',
             }}
           />
@@ -282,11 +291,12 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
           <button
             type="button"
             onClick={addEmotionCircle}
-            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-medium text-sm transition-colors"
+            disabled={!pendingClick}
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-medium text-sm transition-colors disabled:opacity-40"
             style={{ background: emotionColor + '33', color: emotionColor, border: `1px solid ${emotionColor}66` }}
           >
             <Plus className="w-4 h-4" />
-            이 감정 추가
+            {pendingClick ? '선택한 위치에 추가' : '캔버스를 클릭하여 위치 선택'}
           </button>
         </div>
       )}

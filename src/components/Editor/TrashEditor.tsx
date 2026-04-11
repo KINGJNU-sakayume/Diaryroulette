@@ -21,7 +21,7 @@ export default function TrashEditor({ value, onChange, onShred }: TrashEditorPro
 
   const handleShred = useCallback(() => {
     if (!value.trim()) return
-    const chars: ShredChar[] = value.split('').map((char, i) => ({
+    const chars: ShredChar[] = (value.match(/.{1,3}/gs) ?? []).map((char, i) => ({
       char,
       id: i,
       dx: (Math.random() - 0.5) * 300,

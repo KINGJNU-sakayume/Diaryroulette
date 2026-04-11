@@ -70,7 +70,17 @@ export default function EmojiEditor({ value, onChange }: EmojiEditorProps) {
 
   const addEmoji = useCallback(
     (emoji: string) => {
-      onChange(value + emoji)
+      const start = textareaRef.current?.selectionStart ?? value.length
+      const end = textareaRef.current?.selectionEnd ?? value.length
+      const newValue = value.slice(0, start) + emoji + value.slice(end)
+      onChange(newValue)
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          const pos = start + [...emoji].length
+          textareaRef.current.selectionStart = pos
+          textareaRef.current.selectionEnd = pos
+        }
+      })
       textareaRef.current?.focus()
     },
     [value, onChange],

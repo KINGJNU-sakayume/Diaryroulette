@@ -6,8 +6,8 @@ const ROW_HEIGHT = 64
 const VISIBLE_ROWS = 5
 const WINDOW_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS // 320px
 const CENTER_ROW = 2 // 0-indexed center row (rows 0–4, center is row 2)
-const REPEATS = 6 // how many times to repeat the mission list in the drum
-const TARGET_REPEAT = 4 // which repetition the result lands on (0-indexed)
+const REPEATS = 4 // how many times to repeat the mission list in the drum
+const TARGET_REPEAT = 2 // which repetition the result lands on (0-indexed)
 const SPIN_DURATION = 3000 // ms
 
 // Build the long drum list: REPEATS * 36 items
