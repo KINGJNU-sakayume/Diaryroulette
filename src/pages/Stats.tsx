@@ -452,21 +452,64 @@ function StreakCalendar({ journals }: { journals: JournalEntry[] }) {
 
   const CELL = 12
   const GAP = 2
+  const LEFT_MARGIN = 20
+  const TOP_MARGIN = 14
   const colCount = WEEKS
   const rowCount = 7
+
+  const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
   return (
     <div className="overflow-x-auto">
       <svg
-        width={colCount * (CELL + GAP) - GAP}
-        height={rowCount * (CELL + GAP) - GAP}
+        width={LEFT_MARGIN + colCount * (CELL + GAP) - GAP}
+        height={TOP_MARGIN + rowCount * (CELL + GAP) - GAP}
         className="block"
       >
+        {/* Weekday labels (Mon, Wed, Fri only) */}
+        {[1, 3, 5].map((row) => (
+          <text
+            key={row}
+            x={LEFT_MARGIN - 2}
+            y={TOP_MARGIN + row * (CELL + GAP) + CELL / 2}
+            textAnchor="end"
+            fontSize="8"
+            fill="var(--color-muted)"
+            dominantBaseline="middle"
+          >
+            {DAY_LABELS[row]}
+          </text>
+        ))}
+
+        {/* Month labels */}
+        {Array.from({ length: colCount }, (_, col) => {
+          const firstDayOfCol = days[col * 7]
+          if (!firstDayOfCol) return null
+          const month = parseInt(firstDayOfCol.date.slice(5, 7), 10)
+          const prevFirstDay = col > 0 ? days[(col - 1) * 7] : null
+          const prevMonth = prevFirstDay ? parseInt(prevFirstDay.date.slice(5, 7), 10) : -1
+          if (col === 0 || month !== prevMonth) {
+            return (
+              <text
+                key={`month-${col}`}
+                x={LEFT_MARGIN + col * (CELL + GAP)}
+                y={TOP_MARGIN - 3}
+                fontSize="8"
+                fill="var(--color-muted)"
+              >
+                {month}월
+              </text>
+            )
+          }
+          return null
+        })}
+
+        {/* Day cells */}
         {days.map(({ date, filled }, i) => {
           const col = Math.floor(i / 7)
           const row = i % 7
-          const x = col * (CELL + GAP)
-          const y = row * (CELL + GAP)
+          const x = LEFT_MARGIN + col * (CELL + GAP)
+          const y = TOP_MARGIN + row * (CELL + GAP)
           return (
             <rect
               key={date}

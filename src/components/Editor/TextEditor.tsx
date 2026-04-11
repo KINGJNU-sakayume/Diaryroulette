@@ -165,6 +165,15 @@ function getHighlights(
     while ((m = sentencePattern.exec(text)) !== null) {
       ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
     }
+  } else if (missionId === 'lang-9') {
+    // Every space-delimited word (어절) must be exactly 3 characters long
+    const tokenRe = /\S+/g
+    let m: RegExpExecArray | null
+    while ((m = tokenRe.exec(text)) !== null) {
+      if ([...m[0]].length !== 3) {
+        ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
+      }
+    }
   }
 
   // time-3: highlight chars beyond max limit
@@ -234,7 +243,7 @@ interface TextEditorProps {
 
 // ─── Missions that need soft highlighting ─────────────────────────────────────
 
-const HIGHLIGHT_MISSIONS = new Set(['lang-1', 'lang-2', 'lang-3', 'lang-4', 'lang-5', 'lang-6', 'lang-8', 'time-3', 'creative-2'])
+const HIGHLIGHT_MISSIONS = new Set(['lang-1', 'lang-2', 'lang-3', 'lang-4', 'lang-5', 'lang-6', 'lang-8', 'lang-9', 'time-3', 'creative-2'])
 
 // ─── Component ────────────────────────────────────────────────────────────────
 

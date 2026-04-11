@@ -1,12 +1,21 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { RotateCw } from 'lucide-react'
 import SlotMachinePicker from '../components/SlotMachine/SlotMachinePicker'
 import MissionCard from '../components/Roulette/MissionCard'
-import { useTodayMission } from '../hooks/useTodayMission'
+import { useTodayMission, getLocalDateString } from '../hooks/useTodayMission'
+import { getJournal } from '../db/indexedDB'
 
 export default function Home() {
   const { todayRecord, mission, loading, drawMission } = useTodayMission()
   const [isSpinning, setIsSpinning] = useState(false)
+  const [todayJournalStatus, setTodayJournalStatus] = useState<'completed' | 'draft' | null>(null)
+
+  useEffect(() => {
+    const today = getLocalDateString()
+    getJournal(today).then((entry) => {
+      setTodayJournalStatus(entry?.status ?? null)
+    })
+  }, [])
 
   const handleSpin = useCallback(async () => {
     if (isSpinning || todayRecord) return
@@ -76,6 +85,7 @@ export default function Home() {
             <MissionCard
               mission={mission}
               extraData={todayRecord.extraData}
+              isCompleted={todayJournalStatus === 'completed'}
             />
           </div>
         )}

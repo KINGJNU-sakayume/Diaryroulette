@@ -8,6 +8,7 @@ interface MissionCardProps {
   mission: Mission
   extraData?: Record<string, unknown>
   date?: string
+  isCompleted?: boolean
 }
 
 function EditorIcon({ type }: { type: Mission['editorType'] }): ReactNode {
@@ -31,7 +32,7 @@ function EditorTypeLabel(type: Mission['editorType']): string {
   }
 }
 
-export default function MissionCard({ mission, extraData, date }: MissionCardProps) {
+export default function MissionCard({ mission, extraData, date, isCompleted }: MissionCardProps) {
   const navigate = useNavigate()
   const { theme } = useTheme()
   const colors = getCategoryColors(theme)[mission.category]
@@ -43,7 +44,9 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
       : null
 
   const handleWrite = () => {
-    if (date) {
+    if (isCompleted) {
+      navigate('/archive')
+    } else if (date) {
       navigate(`/write?date=${date}&missionId=${mission.id}`)
     } else {
       navigate('/write')
@@ -139,7 +142,7 @@ export default function MissionCard({ mission, extraData, date }: MissionCardPro
         className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-bold transition-all duration-200 hover:opacity-90 active:scale-95"
         style={{ background: `linear-gradient(135deg, ${colors.bg}, ${colors.border})`, color: '#fff' }}
       >
-        오늘 일기 쓰러 가기
+        {isCompleted ? '보관함에서 보기' : '오늘 일기 쓰러 가기'}
         <ArrowRight className="w-4 h-4" />
       </button>
     </div>

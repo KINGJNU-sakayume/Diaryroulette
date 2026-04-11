@@ -22,6 +22,7 @@ export default function Write() {
 
   const dateParam = searchParams.get('date')
   const missionIdParam = searchParams.get('missionId')
+  const backTo = dateParam ? '/drafts' : '/'
   const today = getLocalDateString()
   const targetDate = dateParam ?? today
 
@@ -33,6 +34,8 @@ export default function Write() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [completed, setCompleted] = useState(false)
+  const [timedCanComplete, setTimedCanComplete] = useState(false)
+  const [lastAutoSaved, setLastAutoSaved] = useState<Date | null>(null)
   const completedRef = useRef(false)
   useEffect(() => { completedRef.current = completed }, [completed])
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -101,6 +104,13 @@ export default function Write() {
     load()
   }, [targetDate, missionIdParam, today, navigate])
 
+  // For countdown timed missions, block completion until first keystroke
+  useEffect(() => {
+    if (mission?.editorType === 'timed-text') {
+      setTimedCanComplete(!mission.timerSeconds)
+    }
+  }, [mission])
+
   const autoSaveDraft = useCallback(async () => {
     if (!mission) return
     const entry: JournalEntry = {
@@ -129,11 +139,27 @@ export default function Write() {
     autoSaveRef.current = setInterval(async () => {
       if (contentRef.current && !completedRef.current) {
         await autoSaveDraftRef.current()
+        setLastAutoSaved(new Date())
       }
     }, AUTO_SAVE_MS)
 
+    const saveOnHide = () => {
+      if (document.visibilityState === 'hidden' && contentRef.current && mission.editorType !== 'trash') {
+        autoSaveDraftRef.current()
+      }
+    }
+    const saveOnUnload = () => {
+      if (contentRef.current && mission.editorType !== 'trash') {
+        autoSaveDraftRef.current()
+      }
+    }
+    document.addEventListener('visibilitychange', saveOnHide)
+    window.addEventListener('beforeunload', saveOnUnload)
+
     return () => {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current)
+      document.removeEventListener('visibilitychange', saveOnHide)
+      window.removeEventListener('beforeunload', saveOnUnload)
     }
   }, [mission, loading])
 
@@ -206,6 +232,11 @@ export default function Write() {
   const isTrash = mission.editorType === 'trash'
   const isEmotionTemp = mission.id === 'visual-5'
 
+  const isCharLimitViolated = Boolean(
+    (mission.charLimit?.min !== undefined && content.length < mission.charLimit.min) ||
+    (mission.charLimit?.max !== undefined && content.length > mission.charLimit.max)
+  )
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
@@ -215,7 +246,7 @@ export default function Write() {
       >
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            to="/"
+            to={backTo}
             className="p-1.5 rounded-lg hover-surface transition-colors shrink-0"
             style={{ color: 'var(--color-text-mid)' }}
           >
@@ -227,6 +258,11 @@ export default function Write() {
               <h1 className="text-sm font-bold truncate" style={{ color: 'var(--color-text)' }}>{mission.title}</h1>
             </div>
             <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{targetDate}</p>
+            {lastAutoSaved && (
+              <p style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+                자동저장됨 {lastAutoSaved.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
           </div>
         </div>
 
@@ -250,7 +286,7 @@ export default function Write() {
           {!isTrash && !isCanvas && !completed && (
             <button
               onClick={handleSave}
-              disabled={saving || !content.trim()}
+              disabled={saving || !content.trim() || isCharLimitViolated || (isTimed && !timedCanComplete)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40"
               style={{ background: 'var(--color-accent)', color: '#fff' }}
             >
@@ -357,6 +393,7 @@ export default function Write() {
               onChange={setContent}
               mission={mission}
               extraData={extraData}
+              onTimerReady={(v) => setTimedCanComplete(v)}
             />
           )}
           {!isTrash && !isEmoji && !isCanvas && !isTimed && (

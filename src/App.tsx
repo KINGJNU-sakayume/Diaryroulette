@@ -35,7 +35,7 @@ export default function App() {
             </Layout>
           } />
         </Routes>
-        <DevReviewPanel />
+        {import.meta.env.DEV && <DevReviewPanel />}
       </HashRouter>
     </ThemeProvider>
   )
