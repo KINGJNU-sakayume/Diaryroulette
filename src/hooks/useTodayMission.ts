@@ -18,6 +18,19 @@ export function getLocalDateString(): string {
   return `${y}-${m}-${day}`
 }
 
+export function getEffectiveDateString(): string {
+  const now = new Date()
+  if (now.getHours() < 2) {
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const y = yesterday.getFullYear()
+    const m = String(yesterday.getMonth() + 1).padStart(2, '0')
+    const d = String(yesterday.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  return getLocalDateString()
+}
+
 // ─── Extra data builder (lang-3: pick random bannedVowel) ─────────────────────
 
 const KOREAN_VOWELS = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
@@ -41,7 +54,7 @@ function buildExtraData(mission: Mission): Record<string, unknown> | undefined {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTodayMission() {
-  const today = getLocalDateString()
+  const today = getEffectiveDateString()
   const { getAvailableMissions, addToCooldown, loading: cooldownLoading } = useCooldown()
   const [todayRecord, setTodayRecord] = useState<TodayMissionRecord | null>(null)
   const [loading, setLoading] = useState(true)
