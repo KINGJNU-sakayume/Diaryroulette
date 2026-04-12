@@ -436,18 +436,22 @@ function DonutChart({
 // ─── Streak Calendar ──────────────────────────────────────────────────────────
 
 function StreakCalendar({ journals }: { journals: JournalEntry[] }) {
-  const completedDates = new Set(journals.map((j) => j.id))
+  const completedDateMap = new Map<string, MissionCategory>()
+  journals.forEach((j) => {
+    const m = missions.find((x) => x.id === j.missionId)
+    if (m) completedDateMap.set(j.id, m.category)
+  })
 
   // Show last 16 weeks (112 days)
   const today = new Date()
   const WEEKS = 16
-  const days: Array<{ date: string; filled: boolean }> = []
+  const days: Array<{ date: string; category: MissionCategory | null }> = []
 
   for (let i = WEEKS * 7 - 1; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(today.getDate() - i)
     const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    days.push({ date: dateStr, filled: completedDates.has(dateStr) })
+    days.push({ date: dateStr, category: completedDateMap.get(dateStr) ?? null })
   }
 
   const CELL = 12
@@ -505,7 +509,7 @@ function StreakCalendar({ journals }: { journals: JournalEntry[] }) {
         })}
 
         {/* Day cells */}
-        {days.map(({ date, filled }, i) => {
+        {days.map(({ date, category }, i) => {
           const col = Math.floor(i / 7)
           const row = i % 7
           const x = LEFT_MARGIN + col * (CELL + GAP)
@@ -518,8 +522,8 @@ function StreakCalendar({ journals }: { journals: JournalEntry[] }) {
               width={CELL}
               height={CELL}
               rx={2}
-              fill={filled ? '#65a30d' : 'var(--color-card)'}
-              opacity={filled ? 1 : 0.6}
+              fill={category ? CATEGORY_COLORS[category].bg : 'var(--color-card)'}
+              opacity={category ? 1 : 0.6}
             >
               <title>{date}</title>
             </rect>
