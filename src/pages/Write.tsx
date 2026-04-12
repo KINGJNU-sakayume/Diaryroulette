@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Save, CheckCircle } from 'lucide-react'
 import { missions, type Mission } from '../data/missions'
 import { getJournal, saveJournal, getTodayMission, type JournalEntry } from '../db/indexedDB'
-import { getLocalDateString } from '../hooks/useTodayMission'
+import { getLocalDateString, getEffectiveDateString } from '../hooks/useTodayMission'
 import CategoryBadge from '../components/shared/CategoryBadge'
 import TextEditor from '../components/Editor/TextEditor'
 import TimedTextEditor from '../components/Editor/TimedTextEditor'
@@ -23,7 +23,7 @@ export default function Write() {
   const dateParam = searchParams.get('date')
   const missionIdParam = searchParams.get('missionId')
   const backTo = dateParam ? '/drafts' : '/'
-  const today = getLocalDateString()
+  const today = getEffectiveDateString()
   const targetDate = dateParam ?? today
 
   const [mission, setMission] = useState<Mission | null>(null)

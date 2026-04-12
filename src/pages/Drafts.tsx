@@ -3,12 +3,12 @@ import { useNavigate, Link } from 'react-router-dom'
 import { PenLine, Trash2 } from 'lucide-react'
 import { getJournalsByStatus, deleteJournal, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
-import { getLocalDateString } from '../hooks/useTodayMission'
+import { getLocalDateString, getEffectiveDateString } from '../hooks/useTodayMission'
 import CategoryBadge from '../components/shared/CategoryBadge'
 
 export default function Drafts() {
   const navigate = useNavigate()
-  const today = getLocalDateString()
+  const today = getEffectiveDateString()
   const [drafts, setDrafts] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
