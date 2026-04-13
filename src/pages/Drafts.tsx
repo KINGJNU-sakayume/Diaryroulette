@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { PenLine, Trash2 } from 'lucide-react'
 import { getJournalsByStatus, deleteJournal, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
-import { getLocalDateString, getEffectiveDateString } from '../hooks/useTodayMission'
+import { getEffectiveDateString } from '../hooks/useTodayMission'
 import CategoryBadge from '../components/shared/CategoryBadge'
 
 export default function Drafts() {
