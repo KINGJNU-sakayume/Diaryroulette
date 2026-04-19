@@ -143,3 +143,47 @@ export async function clearAllData(): Promise<void> {
     transaction.onerror = () => reject(transaction.error)
   })
 }
+
+// ─── Atomic import ────────────────────────────────────────────────────────────
+// 단일 readwrite 트랜잭션으로 전체 데이터를 교체한다.
+// 어느 한 put이라도 실패하면 IndexedDB가 자동으로 전체 트랜잭션을 abort → 기존
+// 데이터 손실 없이 롤백된다. 기존 importFromJSON의 "clear 후 순차 put" 패턴은
+// 중간 실패 시 반쯤 깨진 상태를 남겼으나, 이 함수는 all-or-nothing을 보장한다.
+export async function atomicImport(payload: {
+  todayMission: TodayMissionRecord | null
+  cooldownList: CooldownEntry[]
+  journals: JournalEntry[]
+}): Promise<void> {
+  const db = await getDB()
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['missions', 'journals'], 'readwrite')
+    const missionsStore = transaction.objectStore('missions')
+    const journalsStore = transaction.objectStore('journals')
+
+    // 기존 데이터 전부 제거
+    missionsStore.clear()
+    journalsStore.clear()
+
+    // todayMission (optional)
+    if (payload.todayMission) {
+      missionsStore.put(payload.todayMission)
+    }
+
+    // cooldownList는 항상 하나의 레코드
+    const cooldownRecord: CooldownListRecord = {
+      key: 'cooldownList',
+      entries: payload.cooldownList,
+    }
+    missionsStore.put(cooldownRecord)
+
+    // 모든 journal 엔트리
+    for (const journal of payload.journals) {
+      journalsStore.put(journal)
+    }
+
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error('Transaction aborted'))
+  })
+}
