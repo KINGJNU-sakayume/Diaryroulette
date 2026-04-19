@@ -43,6 +43,9 @@ export default function Write() {
   useEffect(() => {
     contentRef.current = content
   }, [content])
+  // createdAt은 첫 저장 시점에 한 번만 결정되면 됨 — ref로 고정해서
+  // autoSaveDraft의 의존성 체인을 끊는다 (stale closure 방지)
+  const createdAtRef = useRef<string | null>(null)
 
   // Load mission + existing draft
   useEffect(() => {
@@ -84,6 +87,7 @@ export default function Write() {
           return
         }
         setJournal(existingJournal)
+        createdAtRef.current = existingJournal.createdAt
         setContent(existingJournal.content ?? '')
         // BUG-6: fall back to journal's own extraData when today-mission lookup yielded nothing
         if (!resolvedExtraData && existingJournal.extraData) {
@@ -113,19 +117,23 @@ export default function Write() {
 
   const autoSaveDraft = useCallback(async () => {
     if (!mission) return
+    // CRITICAL: Trash 미션은 절대 IDB에 저장하지 않음 — 사용자와의 약속 (이중 방어)
+    if (mission.editorType === 'trash') return
+
     const entry: JournalEntry = {
       id: targetDate,
       missionId: mission.id,
-      type: mission.editorType === 'canvas' ? 'canvas' : mission.editorType === 'trash' ? 'trash' : 'text',
+      type: mission.editorType === 'canvas' ? 'canvas' : 'text',
       content: contentRef.current || null,
       status: 'draft',
-      createdAt: journal?.createdAt ?? new Date().toISOString(),
+      createdAt: createdAtRef.current ?? new Date().toISOString(),
       completedAt: null,
       extraData: extraData ?? undefined,
     }
+    createdAtRef.current = entry.createdAt  // 최초 저장 후 고정
     await saveJournal(entry)
     setJournal(entry)
-  }, [mission, targetDate, journal, extraData])
+  }, [mission, targetDate, extraData])
 
   const autoSaveDraftRef = useRef(autoSaveDraft)
   useEffect(() => {
@@ -135,6 +143,8 @@ export default function Write() {
   // Auto-save draft
   useEffect(() => {
     if (!mission || loading) return
+    // CRITICAL: Trash 미션은 자동저장 인터벌 자체를 시작하지 않는다
+    if (mission.editorType === 'trash') return
 
     autoSaveRef.current = setInterval(async () => {
       if (contentRef.current && !completedRef.current) {
@@ -143,23 +153,25 @@ export default function Write() {
       }
     }, AUTO_SAVE_MS)
 
-    const saveOnHide = () => {
-      if (document.visibilityState === 'hidden' && contentRef.current && mission.editorType !== 'trash') {
+    // 페이지를 떠날 때 마지막 저장 시도.
+    // - pagehide는 beforeunload보다 iOS Safari에서 더 안정적으로 발화
+    // - visibilitychange는 탭 전환/백그라운드 전환에서 발화 (pagehide보다 먼저 올 때가 많음)
+    // Trash 가드는 상단 early return으로 이미 보장됨
+    const flush = () => {
+      if (contentRef.current && !completedRef.current) {
         autoSaveDraftRef.current()
       }
     }
-    const saveOnUnload = () => {
-      if (contentRef.current && mission.editorType !== 'trash') {
-        autoSaveDraftRef.current()
-      }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush()
     }
-    document.addEventListener('visibilitychange', saveOnHide)
-    window.addEventListener('beforeunload', saveOnUnload)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', flush)
 
     return () => {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current)
-      document.removeEventListener('visibilitychange', saveOnHide)
-      window.removeEventListener('beforeunload', saveOnUnload)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', flush)
     }
   }, [mission, loading])
 
@@ -172,7 +184,7 @@ export default function Write() {
       type: mission.editorType === 'canvas' ? 'canvas' : mission.editorType === 'trash' ? 'trash' : 'text',
       content: content || null,
       status: 'completed',
-      createdAt: journal?.createdAt ?? new Date().toISOString(),
+      createdAt: createdAtRef.current ?? new Date().toISOString(),
       completedAt: new Date().toISOString(),
       extraData: extraData ?? undefined,
     }
@@ -181,7 +193,7 @@ export default function Write() {
     setSaved(true)
     setCompleted(true)
     setTimeout(() => setSaved(false), 2000)
-  }, [mission, targetDate, content, journal, extraData])
+  }, [mission, targetDate, content, extraData])
 
   const handleCanvasSave = useCallback(
     (dataUrl: string) => {
@@ -192,18 +204,22 @@ export default function Write() {
 
   const handleTrashShred = useCallback(async () => {
     if (!mission) return
+    // 파쇄 완료 기록은 남기되 실제 내용은 저장하지 않는다.
+    // missionId/createdAt/completedAt 메타데이터만 보관함·통계에 반영됨.
+    // (자동저장은 위 useEffect의 early return으로 차단되어 있으므로
+    //  이 시점까지 IDB에는 이 entry가 존재하지 않는다.)
     const entry: JournalEntry = {
       id: targetDate,
       missionId: mission.id,
       type: 'trash',
       content: null,
       status: 'completed',
-      createdAt: journal?.createdAt ?? new Date().toISOString(),
+      createdAt: createdAtRef.current ?? new Date().toISOString(),
       completedAt: new Date().toISOString(),
     }
     await saveJournal(entry)
     setCompleted(true)
-  }, [mission, targetDate, journal])
+  }, [mission, targetDate])
 
   if (loading) {
     return (
