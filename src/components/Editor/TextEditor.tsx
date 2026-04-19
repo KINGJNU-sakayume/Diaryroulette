@@ -223,6 +223,10 @@ function escapeHTML(str: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    // 현재 <mark> 태그의 속성값은 고정 색상 코드뿐이지만, 향후 미션 확장으로
+    // 사용자 입력이 속성값에 들어갈 경우에 대비한 defense in depth.
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
     .replace(/\n/g, '<br>')
     .replace(/ /g, '&nbsp;')
 }
