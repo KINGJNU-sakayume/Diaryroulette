@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Flame, Image, Smile } from 'lucide-react'
+import { Flame, Image, ImageOff, Smile } from 'lucide-react'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
 import CategoryBadge from '../components/shared/CategoryBadge'
@@ -8,6 +8,17 @@ import CategoryBadge from '../components/shared/CategoryBadge'
 interface ModalState {
   entry: JournalEntry
   mission: ReturnType<typeof missions.find>
+}
+
+/**
+ * Canvas 컨텐츠를 <img src>에 넣기 전 방어.
+ * import 경로로 들어온 악성 dataURL(javascript: 스킴 등)이나 손상된
+ * 레코드가 그대로 렌더되지 않도록 이미지/Base64 스킴만 허용한다.
+ * importData.ts의 isSafeImageDataUrl과 정책이 일치해야 한다.
+ */
+function isSafeImageDataUrl(src: string | null | undefined): src is string {
+  if (typeof src !== 'string') return false
+  return /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(src)
 }
 
 export default function Archive() {
@@ -76,7 +87,7 @@ export default function Archive() {
                         <JournalPreview entry={entry} />
                       </div>
 
-                      {entry.type === 'canvas' && entry.content && (
+                      {entry.type === 'canvas' && isSafeImageDataUrl(entry.content) && (
                         <img
                           src={entry.content}
                           alt="썸네일"
@@ -175,6 +186,19 @@ function JournalContent({ entry }: { entry: JournalEntry }) {
     )
   }
   if (entry.type === 'canvas' && entry.content) {
+    if (!isSafeImageDataUrl(entry.content)) {
+      return (
+        <div
+          className="flex flex-col items-center gap-2 py-8 rounded-xl border"
+          style={{ background: 'var(--color-card)', borderColor: 'var(--color-border)' }}
+        >
+          <ImageOff className="w-8 h-8" style={{ color: 'var(--color-muted)' }} />
+          <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            이 드로잉은 손상되어 표시할 수 없습니다.
+          </p>
+        </div>
+      )
+    }
     return (
       <img
         src={entry.content}
