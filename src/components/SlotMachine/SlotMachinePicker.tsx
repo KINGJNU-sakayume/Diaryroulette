@@ -8,13 +8,34 @@ const WINDOW_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS // 320px
 const CENTER_ROW = 2 // 0-indexed center row (rows 0–4, center is row 2)
 const REPEATS = 4 // how many times to repeat the mission list in the drum
 const TARGET_REPEAT = 2 // which repetition the result lands on (0-indexed)
-const SPIN_DURATION = 3000 // ms
+const SPIN_DURATION_DEFAULT = 3000 // ms — 정상 모드
+const SPIN_DURATION_REDUCED = 1    // ms — prefers-reduced-motion 사용자
 
 // Build the long drum list: REPEATS * 36 items
 const DRUM_ITEMS = Array.from({ length: REPEATS }, () => missions).flat()
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
+}
+
+/**
+ * prefers-reduced-motion: reduce 현재값을 구독한다.
+ * iOS "설정 → 손쉬운 사용 → 동작 → 동작 줄이기"를 켠 사용자가 3초 애니메이션으로
+ * 멀미를 겪지 않도록, 이 설정이 켜져 있으면 슬롯머신을 즉시 결과에 착지시킨다.
+ */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return reduced
 }
 
 function computeFinalY(missionIndex: number): number {
@@ -39,6 +60,8 @@ export default function SlotMachinePicker({
   const [centeredIndex, setCenteredIndex] = useState<number>(-1) // drum index of centered item
   const { theme } = useTheme()
   const categoryColors = getCategoryColors(theme)
+  const reducedMotion = usePrefersReducedMotion()
+  const SPIN_DURATION = reducedMotion ? SPIN_DURATION_REDUCED : SPIN_DURATION_DEFAULT
 
   const rafRef = useRef<number | null>(null)
   const startTimeRef = useRef<number | null>(null)
@@ -79,6 +102,11 @@ export default function SlotMachinePicker({
           setTranslateY(endYRef.current)
           setCenteredIndex(finalDrumIndex)
           setPhase('done')
+          // Bounce 애니메이션은 reduced-motion 사용자에겐 생략 — 즉시 완료 콜백.
+          if (reducedMotion) {
+            onSpinCompleteRef.current()
+            return
+          }
           // Bounce: drive +4px overshoot and return over 150ms via rAF loop
           const baseY = endYRef.current
           const bounceDuration = 150
@@ -118,6 +146,8 @@ export default function SlotMachinePicker({
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
     }
+    // reducedMotion은 의존성에서 의도적으로 제외 — 스핀 도중 설정이 바뀌어도
+    // 현재 애니메이션은 시작 시점의 설정을 따라간다. 다음 스핀부터 새 값이 반영됨.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSpinning, targetMissionId])
 
