@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { Pen, Eraser, Trash2, Plus } from 'lucide-react'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface CanvasEditorProps {
   initialDataUrl?: string | null
@@ -9,32 +10,48 @@ interface CanvasEditorProps {
 
 const CANVAS_WIDTH = 800
 const CANVAS_HEIGHT = 450
-const CANVAS_BG = '#0d1117'
-const COLORS = ['#e6edf3', '#ef4444', '#f97316', '#facc15', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6']
+// 펜 색 팔레트. 첫 번째 색은 테마에 따라 동적으로 교체됨(다크=흰, 라이트=검정)
+// 나머지 7개는 테마 중립적인 채도 높은 색.
+const COLORS_DARK_DEFAULT = '#e6edf3'  // 다크 테마의 기본 펜 색 (거의 흰색)
+const COLORS_LIGHT_DEFAULT = '#1c1510' // 라이트 테마의 기본 펜 색 (거의 검정)
+const COLORS_ACCENT = ['#ef4444', '#f97316', '#facc15', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6']
 
 export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = false }: CanvasEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawing = useRef(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
+  const { theme } = useTheme()
+
+  // 테마에 따른 기본 펜 색. 팔레트는 [기본색, ...7개 액센트]
+  const defaultPenColor = theme === 'light' ? COLORS_LIGHT_DEFAULT : COLORS_DARK_DEFAULT
+  const COLORS = [defaultPenColor, ...COLORS_ACCENT]
 
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush')
-  const [color, setColor] = useState('#e6edf3')
+  const [color, setColor] = useState<string>(defaultPenColor)
   const [brushSize, setBrushSize] = useState(6)
+
+  // 테마가 바뀔 때 "기본 펜 색"을 선택 중이었다면 새 기본 펜 색으로 교체
+  // (사용자가 명시적으로 고른 액센트 색은 유지)
+  useEffect(() => {
+    if (color === COLORS_DARK_DEFAULT || color === COLORS_LIGHT_DEFAULT) {
+      setColor(defaultPenColor)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme])
 
   // Emotion temperature sliders (visual-5)
   const [intensity, setIntensity] = useState(50)  // 0–100 → radius 5–60
   const [hue, setHue] = useState(200)             // 0–360 → HSL color
   const [pendingClick, setPendingClick] = useState<{ x: number; y: number } | null>(null)
 
-  // Initialize canvas
+  // Initialize canvas — 투명 배경으로 시작.
+  // initialDataUrl이 있으면 그대로 그려넣음(이전 JPEG 드로잉의 배경은 그대로 유지됨,
+  // 하위 호환). 새 캔버스는 투명 상태로 유지되어 테마 전환과 무관하게 표시된다.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-
-    ctx.fillStyle = CANVAS_BG
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
 
     if (initialDataUrl) {
       const img = new Image()
@@ -70,10 +87,16 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     const ctx = canvas.getContext('2d')!
     const pos = getPos(e)
 
+    // 지우개는 destination-out으로 실제 픽셀을 투명화. 브러시는 source-over(기본).
+    ctx.save()
+    if (tool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out'
+    }
     ctx.beginPath()
     ctx.arc(pos.x, pos.y, (tool === 'eraser' ? brushSize * 2 : brushSize) / 2, 0, Math.PI * 2)
-    ctx.fillStyle = tool === 'eraser' ? CANVAS_BG : color
+    ctx.fillStyle = color  // eraser에서는 color 값이 무시됨(destination-out이 alpha만 본다)
     ctx.fill()
+    ctx.restore()
   }, [isEmotionTemp, tool, color, brushSize, getPos])
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -83,14 +106,19 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     const pos = getPos(e)
     const last = lastPos.current ?? pos
 
+    ctx.save()
+    if (tool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out'
+    }
     ctx.beginPath()
     ctx.moveTo(last.x, last.y)
     ctx.lineTo(pos.x, pos.y)
-    ctx.strokeStyle = tool === 'eraser' ? CANVAS_BG : color
+    ctx.strokeStyle = color  // eraser는 alpha만 사용
     ctx.lineWidth = tool === 'eraser' ? brushSize * 2 : brushSize
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.stroke()
+    ctx.restore()
 
     lastPos.current = pos
   }, [tool, color, brushSize, getPos])
@@ -99,16 +127,16 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     isDrawing.current = false
     lastPos.current = null
     if (onSave) {
-      onSave(canvasRef.current!.toDataURL('image/jpeg', 0.85))
+      // PNG로 저장 — 투명 배경을 보존해서 테마 전환에 대응
+      onSave(canvasRef.current!.toDataURL('image/png'))
     }
   }, [onSave])
 
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = CANVAS_BG
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-    if (onSave) onSave(canvas.toDataURL('image/jpeg', 0.85))
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+    if (onSave) onSave(canvas.toDataURL('image/png'))
   }, [onSave])
 
   // Emotion temperature: add circle to canvas
@@ -128,7 +156,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     ctx.stroke()
 
     setPendingClick(null)
-    if (onSave) onSave(canvas.toDataURL('image/jpeg', 0.85))
+    if (onSave) onSave(canvas.toDataURL('image/png'))
   }, [intensity, hue, pendingClick, onSave])
 
   const emotionColor = `hsl(${hue}, 80%, 60%)`
@@ -140,7 +168,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
       {!isEmotionTemp && (
         <div
           className="flex items-center gap-3 p-3 rounded-xl border flex-wrap"
-          style={{ background: '#161b22', borderColor: '#30363d' }}
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
         >
           {/* Tool toggles */}
           <div className="flex gap-1">
@@ -148,7 +176,10 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
               type="button"
               onClick={() => setTool('brush')}
               className="p-2 rounded-lg transition-colors"
-              style={{ background: tool === 'brush' ? '#30363d' : 'transparent', color: '#e6edf3' }}
+              style={{
+                background: tool === 'brush' ? 'var(--color-border)' : 'transparent',
+                color: 'var(--color-text)',
+              }}
               title="브러시"
             >
               <Pen className="w-4 h-4" />
@@ -157,14 +188,17 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
               type="button"
               onClick={() => setTool('eraser')}
               className="p-2 rounded-lg transition-colors"
-              style={{ background: tool === 'eraser' ? '#30363d' : 'transparent', color: '#e6edf3' }}
+              style={{
+                background: tool === 'eraser' ? 'var(--color-border)' : 'transparent',
+                color: 'var(--color-text)',
+              }}
               title="지우개"
             >
               <Eraser className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="w-px h-6 bg-slate-700" />
+          <div className="w-px h-6" style={{ background: 'var(--color-border)' }} />
 
           {/* Color palette */}
           <div className="flex gap-1.5">
@@ -176,17 +210,18 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
                 className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
                 style={{
                   background: c,
-                  borderColor: color === c ? '#fff' : 'transparent',
+                  // 선택된 색 표시 테두리 — 테마 대비 색으로 강조
+                  borderColor: color === c ? 'var(--color-text)' : 'transparent',
                 }}
               />
             ))}
           </div>
 
-          <div className="w-px h-6 bg-slate-700" />
+          <div className="w-px h-6" style={{ background: 'var(--color-border)' }} />
 
           {/* Brush size */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">크기</span>
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>크기</span>
             <input
               type="range"
               min={2}
@@ -195,7 +230,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
               onChange={(e) => setBrushSize(Number(e.target.value))}
               className="w-20 accent-violet-500"
             />
-            <span className="text-xs text-slate-400 w-4">{brushSize}</span>
+            <span className="text-xs w-4" style={{ color: 'var(--color-text-mid)' }}>{brushSize}</span>
           </div>
 
           <div className="ml-auto">
@@ -211,8 +246,16 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
         </div>
       )}
 
-      {/* Canvas */}
-      <div className="relative rounded-xl overflow-hidden border" style={{ borderColor: '#30363d' }}>
+      {/* Canvas
+          - 투명 PNG 저장이므로 캔버스 "바탕"은 이 div의 background가 담당
+          - 테마에 따라 자동 전환되어 라이트 모드에서도 대비가 유지됨 */}
+      <div
+        className="relative rounded-xl overflow-hidden border"
+        style={{
+          borderColor: 'var(--color-border)',
+          background: 'var(--color-surface)',
+        }}
+      >
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
@@ -246,11 +289,11 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
       {isEmotionTemp && (
         <div
           className="p-4 rounded-xl border space-y-4"
-          style={{ background: '#161b22', borderColor: '#30363d' }}
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
         >
           <div className="flex items-center gap-4">
             <div className="flex-1 space-y-2">
-              <label className="text-xs text-slate-400">강도 (크기)</label>
+              <label className="text-xs" style={{ color: 'var(--color-muted)' }}>강도 (크기)</label>
               <input
                 type="range"
                 min={0}
@@ -272,7 +315,7 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs text-slate-400">온도 (색상) — 차가움 ↔ 뜨거움</label>
+            <label className="text-xs" style={{ color: 'var(--color-muted)' }}>온도 (색상) — 차가움 ↔ 뜨거움</label>
             <input
               type="range"
               min={0}
