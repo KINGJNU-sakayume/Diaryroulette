@@ -21,9 +21,13 @@ export default function ProgressBar({
     <div className="w-full">
       {(label || showText) && (
         <div className="flex justify-between items-center mb-1">
-          {label && <span className="text-xs text-slate-400">{label}</span>}
+          {label && (
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              {label}
+            </span>
+          )}
           {showText && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
               {max !== undefined ? `${value} / ${max}` : `${Math.round(pct)}%`}
             </span>
           )}
@@ -31,7 +35,7 @@ export default function ProgressBar({
       )}
       <div
         className="w-full rounded-full overflow-hidden"
-        style={{ height, background: '#21262d' }}
+        style={{ height, background: 'var(--color-card)' }}
       >
         <div
           className="h-full rounded-full transition-all duration-300"

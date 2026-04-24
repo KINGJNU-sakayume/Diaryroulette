@@ -14,9 +14,12 @@ export default {
         time: { DEFAULT: '#d97706', light: '#fcd34d', dark: '#b45309' },
         visual: { DEFAULT: '#db2777', light: '#f9a8d4', dark: '#9d174d' },
         creative: { DEFAULT: '#65a30d', light: '#bef264', dark: '#4d7c0f' },
-        surface: '#161b22',
-        card: '#21262d',
-        border: '#30363d',
+        // CSS 변수 참조 — 테마 전환 시 자동 업데이트
+        // (현재는 utility class로 직접 쓰이지 않고 인라인 style에서 var(...)를
+        //  쓰지만, 향후 bg-surface 등의 사용에 대비한 defensive 정의)
+        surface: 'var(--color-surface)',
+        card: 'var(--color-card)',
+        border: 'var(--color-border)',
       },
       keyframes: {
         shred: {
