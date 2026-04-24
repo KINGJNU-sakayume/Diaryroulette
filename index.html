@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" class="dark">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
 
@@ -9,8 +9,39 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
 
-    <!-- PWA theme color — dark default; JS updates this on theme toggle -->
+    <!--
+      Theme bootstrap — React가 마운트되기 전에 먼저 테마를 확정.
+      이렇게 해두면 첫 페인트부터 올바른 배경색이 적용되어 FOUC(배경 깜빡임)가 사라진다.
+      ThemeContext의 초기값 로직과 반드시 일치해야 한다.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme')
+          var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          var theme = stored === 'light' || stored === 'dark'
+            ? stored
+            : (systemDark ? 'dark' : 'light')
+          document.documentElement.setAttribute('data-theme', theme)
+          // theme-color meta는 아래 meta 태그가 로드된 후 갱신
+          window.__initialTheme = theme
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+          window.__initialTheme = 'dark'
+        }
+      })()
+    </script>
+
+    <!-- PWA theme color — 부트 스크립트가 결정한 테마에 맞춰 JS가 갱신 -->
     <meta name="theme-color" content="#0d1117" id="theme-color-meta" />
+    <script>
+      (function () {
+        var meta = document.getElementById('theme-color-meta')
+        if (meta && window.__initialTheme) {
+          meta.setAttribute('content', window.__initialTheme === 'dark' ? '#0d1117' : '#FFFDF8')
+        }
+      })()
+    </script>
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
