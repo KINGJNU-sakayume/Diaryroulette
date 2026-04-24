@@ -73,12 +73,21 @@ export default function TrashEditor({ value, onChange, onShred }: TrashEditorPro
     setShredChars(splitIntoShredChunks(value))
     setShredding(true)
 
+    // prefers-reduced-motion 사용자에겐 애니메이션을 기다리지 않고 즉시 완료.
+    // (CSS @keyframes shred는 전역 규칙으로 이미 0.01ms로 단축되지만, setTimeout은
+    //  별도로 처리해야 "shredding" 상태가 2초간 지속되는 것을 방지할 수 있음.)
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const duration = reducedMotion ? 0 : 2000
+
     setTimeout(() => {
       setShredding(false)
       setShredChars([])
       setDone(true)
       onShred()
-    }, 2000)
+    }, duration)
   }, [value, onShred])
 
   if (done) {
