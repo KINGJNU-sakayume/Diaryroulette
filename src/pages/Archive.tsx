@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Flame, Image, ImageOff, Smile } from 'lucide-react'
+import { Flame, Image, ImageOff, Smile, X } from 'lucide-react'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
 import CategoryBadge from '../components/shared/CategoryBadge'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 interface ModalState {
   entry: JournalEntry
@@ -66,9 +67,19 @@ export default function Archive() {
   }
 
   useEffect(() => {
-    document.body.style.overflow = modal ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
+    if (!modal) return
+    // 이전 overflow 값을 저장해뒀다 복원 — 다른 코드가 body overflow를 건드리고
+    // 있어도 원래 값으로 돌려줌. 라우트 이동 등으로 모달이 unmount되는 경우에도 안전.
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
   }, [modal])
+
+  // 포커스 트랩 — 모달 활성 시 내부에 포커스 가둠, ESC로 닫기, 닫힐 때 포커스 복원
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const modalContainerRef = useFocusTrap<HTMLDivElement>(!!modal, closeModal, closeButtonRef)
 
   if (loading) {
     return (
@@ -140,24 +151,35 @@ export default function Archive() {
           onClick={closeModal}
         >
           <div
-            className="w-full max-w-xl rounded-2xl border p-6 max-h-[80vh] overflow-y-auto"
+            ref={modalContainerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="archive-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-xl rounded-2xl border p-6 max-h-[80vh] overflow-y-auto outline-none"
             style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
                 <CategoryBadge category={modal.mission!.category} />
-                <h2 className="text-xl font-bold font-serif mt-2" style={{ color: 'var(--color-text)' }}>
+                <h2
+                  id="archive-modal-title"
+                  className="text-xl font-bold font-serif mt-2"
+                  style={{ color: 'var(--color-text)' }}
+                >
                   {modal.mission!.title}
                 </h2>
                 <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{modal.entry.id}</p>
               </div>
               <button
+                ref={closeButtonRef}
                 onClick={closeModal}
-                className="text-xl shrink-0"
+                aria-label="닫기"
+                className="shrink-0 p-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                 style={{ color: 'var(--color-muted)' }}
               >
-                ✕
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
