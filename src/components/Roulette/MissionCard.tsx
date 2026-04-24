@@ -45,7 +45,12 @@ export default function MissionCard({ mission, extraData, date, isCompleted }: M
 
   const handleWrite = () => {
     if (isCompleted) {
-      navigate('/archive')
+      // date가 있으면 해당 엔트리 딥링크(Archive 모달 자동 오픈), 없으면 목록으로 fallback
+      if (date) {
+        navigate(`/archive/${date}`)
+      } else {
+        navigate('/archive')
+      }
     } else if (date) {
       navigate(`/write?date=${date}&missionId=${mission.id}`)
     } else {

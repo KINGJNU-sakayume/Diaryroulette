@@ -13,11 +13,9 @@ const PAGE_TITLES: Record<string, string> = {
 
 interface LayoutProps {
   children: React.ReactNode
-  /** Optional count badge rendered next to the page title on mobile (e.g. "32개") */
-  badge?: string
 }
 
-export default function Layout({ children, badge }: LayoutProps) {
+export default function Layout({ children }: LayoutProps) {
   const { theme, toggleTheme } = useTheme()
   const { pathname } = useLocation()
   const pageTitle = PAGE_TITLES[pathname] ?? '일기 룰렛'
@@ -45,7 +43,7 @@ export default function Layout({ children, badge }: LayoutProps) {
             일기 룰렛
           </Link>
 
-          {/* Mobile: current page title + optional badge (hidden on desktop) */}
+          {/* Mobile: current page title (hidden on desktop) */}
           <div className="flex items-center gap-2 md:hidden ml-1">
             {pathname !== '/' && (
               <span
@@ -53,11 +51,6 @@ export default function Layout({ children, badge }: LayoutProps) {
                 style={{ color: 'var(--color-text)' }}
               >
                 {pageTitle}
-              </span>
-            )}
-            {badge && (
-              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                {badge}
               </span>
             )}
           </div>
