@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Flame, Image, ImageOff, Smile } from 'lucide-react'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { missions } from '../data/missions'
@@ -25,6 +25,9 @@ export default function Archive() {
   const [journals, setJournals] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<ModalState | null>(null)
+  const navigate = useNavigate()
+  // /archive/:date 딥링크 파라미터. 예: /archive/2026-04-19
+  const { date: dateParam } = useParams<{ date?: string }>()
 
   useEffect(() => {
     getAllJournals()
@@ -36,6 +39,31 @@ export default function Archive() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  // URL의 :date가 바뀌면 해당 엔트리의 모달을 자동으로 연다.
+  // (목록 로드 완료 후 실행되어야 하므로 journals 의존성 포함)
+  useEffect(() => {
+    if (!dateParam) {
+      setModal(null)
+      return
+    }
+    if (journals.length === 0) return
+    const entry = journals.find((j) => j.id === dateParam)
+    if (!entry) return
+    const mission = missions.find((m) => m.id === entry.missionId)
+    if (!mission) return
+    setModal({ entry, mission })
+  }, [dateParam, journals])
+
+  // 모달 닫기 — URL도 /archive로 되돌린다.
+  // replace:true로 뒤로가기 히스토리가 쌓이지 않도록.
+  const closeModal = () => {
+    if (dateParam) {
+      navigate('/archive', { replace: true })
+    } else {
+      setModal(null)
+    }
+  }
 
   useEffect(() => {
     document.body.style.overflow = modal ? 'hidden' : ''
@@ -73,7 +101,7 @@ export default function Archive() {
                 return (
                   <button
                     key={entry.id}
-                    onClick={() => setModal({ entry, mission })}
+                    onClick={() => navigate(`/archive/${entry.id}`)}
                     className="w-full text-left rounded-xl border p-4 transition-all hover-surface"
                     style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
                   >
@@ -109,7 +137,7 @@ export default function Archive() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.85)' }}
-          onClick={() => setModal(null)}
+          onClick={closeModal}
         >
           <div
             className="w-full max-w-xl rounded-2xl border p-6 max-h-[80vh] overflow-y-auto"
@@ -125,7 +153,7 @@ export default function Archive() {
                 <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{modal.entry.id}</p>
               </div>
               <button
-                onClick={() => setModal(null)}
+                onClick={closeModal}
                 className="text-xl shrink-0"
                 style={{ color: 'var(--color-muted)' }}
               >
