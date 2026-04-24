@@ -83,7 +83,8 @@ export default function Write() {
       const existingJournal = await getJournal(targetDate)
       if (existingJournal) {
         if (existingJournal.status === 'completed') {
-          navigate('/archive', { replace: true })
+          // 완료된 일기는 해당 엔트리의 딥링크로 이동해 Archive 모달이 자동 오픈되게 함
+          navigate(`/archive/${existingJournal.id}`, { replace: true })
           return
         }
         setJournal(existingJournal)
