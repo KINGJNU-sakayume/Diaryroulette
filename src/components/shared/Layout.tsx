@@ -68,6 +68,8 @@ export default function Layout({ children }: LayoutProps) {
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
+            aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+            aria-pressed={theme === 'dark'}
             style={{
               background: 'var(--color-card)',
               border: '1px solid var(--color-border)',
@@ -79,7 +81,7 @@ export default function Layout({ children }: LayoutProps) {
             }}
             title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            <span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span>
           </button>
 
         </div>
