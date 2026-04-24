@@ -242,6 +242,12 @@ interface TextEditorProps {
   placeholder?: string
   readOnly?: boolean
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  /**
+   * textarea의 입력 이벤트. onKeyDown과 달리 붙여넣기/드래그앤드롭/IME 조합
+   * 완료 등 모든 value 변경을 포착한다. TimedTextEditor의 타이머 시작 트리거처럼
+   * "어떤 방식으로든 입력이 있었는가"를 감지해야 할 때 사용.
+   */
+  onInput?: (e: React.FormEvent<HTMLTextAreaElement>) => void
   forceInvisible?: boolean
 }
 
@@ -260,6 +266,7 @@ export default function TextEditor({
   placeholder = '오늘의 이야기를 시작하세요…',
   readOnly = false,
   onKeyDown,
+  onInput,
   forceInvisible = false,
 }: TextEditorProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -407,6 +414,7 @@ export default function TextEditor({
           onChange={handleChange}
           onScroll={needsHighlight ? syncOverlayScroll : undefined}
           onKeyDown={onKeyDown}
+          onInput={onInput}
           readOnly={readOnly}
           placeholder={placeholder}
           className="w-full min-h-64 p-4 rounded-xl border text-sm leading-relaxed resize-y outline-none transition-colors"

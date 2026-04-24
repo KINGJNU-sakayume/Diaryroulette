@@ -38,7 +38,9 @@ export default function TimedTextEditor({
   const [celebrated, setCelebrated] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Start timer on first keystroke
+  // Start timer on first input event.
+  // onKeyDown만 감지하면 붙여넣기/드래그앤드롭/IME 완료/모바일 자동완성 탭으로
+  // 타이머를 우회할 수 있으므로, 모든 value 변경을 포착하는 onInput으로 트리거한다.
   const startTimer = useCallback(() => {
     if (started) return
     setStarted(true)
@@ -72,15 +74,20 @@ export default function TimedTextEditor({
         e.preventDefault()
         return
       }
-      startTimer()
+      // 타이머 시작은 onInput에서 담당. 여기서는 백스페이스 차단만.
     },
-    [backspaceDisabled, startTimer],
+    [backspaceDisabled],
   )
+
+  const handleInput = useCallback(() => {
+    startTimer()
+  }, [startTimer])
 
   const handleChange = useCallback(
     (val: string) => {
-      if (charMin && val.length >= charMin) {
-        setCelebrated(true)
+      // celebrated는 가역적으로 — 목표 달성 후 삭제하면 다시 아래로 내려감.
+      if (charMin) {
+        setCelebrated(val.length >= charMin)
       }
       onChange(val)
     },
@@ -88,25 +95,33 @@ export default function TimedTextEditor({
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    // relative 컨테이너 — 블랙아웃 오버레이가 이 영역만 덮도록 스코프 한정.
+    // 이전에는 fixed inset-0로 헤더/탭바까지 가려 탈출구가 사라지는 문제가 있었다.
+    <div className="flex flex-col gap-4 relative">
       {/* Timer display — hidden when showTimer is false */}
       {mission.showTimer !== false && (
         <div
           className={`flex items-center justify-between p-4 rounded-xl border${isBlackout && !revealed ? ' relative z-50' : ''}`}
-          style={{ background: '#161b22', borderColor: '#30363d' }}
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
         >
           <div className="flex items-center gap-3">
             <Timer className="w-5 h-5 text-amber-400" />
             <span
               className="text-2xl font-mono font-bold tabular-nums"
               style={{
-                color: isTimeUp ? '#ef4444' : isCountdown && timeRemaining < 10 ? '#f97316' : '#e6edf3',
+                color: isTimeUp
+                  ? '#ef4444'
+                  : isCountdown && timeRemaining < 10
+                  ? '#f97316'
+                  : 'var(--color-text)',
               }}
             >
               {formatTime(timeRemaining)}
             </span>
             {!started && (
-              <span className="text-xs text-slate-500">첫 타이핑 시 시작됩니다</span>
+              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                첫 타이핑 시 시작됩니다
+              </span>
             )}
             {isTimeUp && <span className="text-xs text-red-400 animate-pulse">시간 종료!</span>}
           </div>
@@ -120,7 +135,11 @@ export default function TimedTextEditor({
             type="button"
             onClick={() => setRevealed((r) => !r)}
             className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border transition-colors"
-            style={{ borderColor: '#30363d', color: '#8b949e', background: '#21262d' }}
+            style={{
+              borderColor: 'var(--color-border)',
+              color: 'var(--color-muted)',
+              background: 'var(--color-card)',
+            }}
           >
             {revealed ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
             {revealed ? '가리기' : '미리보기'}
@@ -140,14 +159,21 @@ export default function TimedTextEditor({
             showText
           />
           {backspaceDisabled && (
-            <p className="text-xs text-slate-500 mt-1">⚠️ 백스페이스 사용 불가</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+              ⚠️ 백스페이스 사용 불가
+            </p>
           )}
         </div>
       )}
 
-      {/* Blackout overlay — pointer-events-none so typing and button clicks pass through */}
+      {/* Blackout overlay — absolute(에디터 컨테이너 기준)로 스코프 한정.
+          헤더/탭바는 덮지 않아 사용자가 언제든 화면을 벗어날 수 있다.
+          pointer-events-none으로 에디터 상호작용은 그대로 통과된다. */}
       {isBlackout && !revealed && (
-        <div className="fixed inset-0 z-40 pointer-events-none" style={{ background: 'rgba(0,0,0,0.97)' }}>
+        <div
+          className="absolute inset-0 z-40 pointer-events-none rounded-xl"
+          style={{ background: 'rgba(0,0,0,0.97)' }}
+        >
           <div className="absolute top-4 left-0 right-0 flex justify-center">
             <p className="text-slate-600 text-sm">어둠 속에서 써 내려가세요…</p>
           </div>
@@ -163,6 +189,7 @@ export default function TimedTextEditor({
           extraData={extraData}
           charLimit={mission.charLimit}
           onKeyDown={handleKeyDown}
+          onInput={handleInput}
           readOnly={isTimeUp}
           forceInvisible={isBlackout && !revealed}
           placeholder={

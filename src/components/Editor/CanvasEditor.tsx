@@ -44,6 +44,11 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
   const [hue, setHue] = useState(200)             // 0–360 → HSL color
   const [pendingClick, setPendingClick] = useState<{ x: number; y: number } | null>(null)
 
+  // 초기 이미지 로드 중에는 사용자 입력을 차단한다. img.onload는 비동기이므로,
+  // 사용자가 로드 완료 전에 붓을 대면 이후 drawImage가 사용자의 스트로크를
+  // 덮어써 사라지게 한다. initialDataUrl이 없으면 처음부터 false.
+  const [isLoadingImage, setIsLoadingImage] = useState<boolean>(!!initialDataUrl)
+
   // Initialize canvas — 투명 배경으로 시작.
   // initialDataUrl이 있으면 그대로 그려넣음(이전 JPEG 드로잉의 배경은 그대로 유지됨,
   // 하위 호환). 새 캔버스는 투명 상태로 유지되어 테마 전환과 무관하게 표시된다.
@@ -55,7 +60,14 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
 
     if (initialDataUrl) {
       const img = new Image()
-      img.onload = () => ctx.drawImage(img, 0, 0)
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0)
+        setIsLoadingImage(false)
+      }
+      img.onerror = () => {
+        // 로드 실패해도 최소한 사용자 입력은 허용
+        setIsLoadingImage(false)
+      }
       img.src = initialDataUrl
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,21 +135,66 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     lastPos.current = pos
   }, [tool, color, brushSize, getPos])
 
+  // ─── Debounced save ──────────────────────────────────────────────────────
+  // toDataURL('image/png')은 800×450 캔버스 전체를 직렬화하므로 비용이 크다.
+  // 매 스트로크마다 호출하면 긴 드로잉 세션에서 write amplification과
+  // 모바일 배터리 소모를 일으키므로 500ms 디바운스.
+  //
+  // 페이지 이탈·언마운트 시에는 대기 중인 저장을 즉시 flush해야 데이터 손실이
+  // 없다(다음 섹션의 useEffect cleanup + pagehide 핸들러).
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    if (onSave && canvasRef.current) {
+      onSave(canvasRef.current.toDataURL('image/png'))
+    }
+  }, [onSave])
+
+  const debouncedSave = useCallback(() => {
+    if (!onSave) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      if (canvasRef.current && onSave) {
+        onSave(canvasRef.current.toDataURL('image/png'))
+      }
+      saveTimerRef.current = null
+    }, 500)
+  }, [onSave])
+
+  // 언마운트 시 + pagehide 시 대기 중인 저장을 즉시 flush.
+  // flushSave 레퍼런스 변화와 무관하게 "현재의" flushSave를 호출하도록 ref로 고정.
+  const flushSaveRef = useRef(flushSave)
+  useEffect(() => {
+    flushSaveRef.current = flushSave
+  }, [flushSave])
+
+  useEffect(() => {
+    const onPageHide = () => flushSaveRef.current()
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      window.removeEventListener('pagehide', onPageHide)
+      // 언마운트 시점에 대기 중인 저장이 있으면 즉시 기록
+      flushSaveRef.current()
+    }
+  }, [])
+
   const handlePointerUp = useCallback(() => {
     isDrawing.current = false
     lastPos.current = null
-    if (onSave) {
-      // PNG로 저장 — 투명 배경을 보존해서 테마 전환에 대응
-      onSave(canvasRef.current!.toDataURL('image/png'))
-    }
-  }, [onSave])
+    debouncedSave()
+  }, [debouncedSave])
 
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-    if (onSave) onSave(canvas.toDataURL('image/png'))
-  }, [onSave])
+    // 전체 지우기는 중요한 상태 변화라 디바운스 없이 즉시 기록
+    flushSave()
+  }, [flushSave])
 
   // Emotion temperature: add circle to canvas
   const addEmotionCircle = useCallback(() => {
@@ -156,8 +213,9 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
     ctx.stroke()
 
     setPendingClick(null)
-    if (onSave) onSave(canvas.toDataURL('image/png'))
-  }, [intensity, hue, pendingClick, onSave])
+    // 감정 원 추가도 즉시 저장(명시적 행동)
+    flushSave()
+  }, [intensity, hue, pendingClick, flushSave])
 
   const emotionColor = `hsl(${hue}, 80%, 60%)`
   const emotionRadius = 5 + (intensity / 100) * 55
@@ -265,8 +323,28 @@ export default function CanvasEditor({ initialDataUrl, onSave, isEmotionTemp = f
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           className="w-full block touch-none"
-          style={{ cursor: tool === 'eraser' ? 'cell' : 'crosshair', maxHeight: '60vh', objectFit: 'contain' }}
+          style={{
+            cursor: tool === 'eraser' ? 'cell' : 'crosshair',
+            maxHeight: '60vh',
+            objectFit: 'contain',
+            // 초기 이미지 로드 중엔 입력을 차단해 사용자의 첫 스트로크가
+            // drawImage에 덮여 사라지는 레이스를 방지.
+            pointerEvents: isLoadingImage ? 'none' : 'auto',
+            opacity: isLoadingImage ? 0.6 : 1,
+          }}
         />
+
+        {/* 로드 인디케이터 */}
+        {isLoadingImage && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            aria-live="polite"
+          >
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              이미지 불러오는 중…
+            </span>
+          </div>
+        )}
 
         {/* Emotion temp preview circle */}
         {isEmotionTemp && pendingClick && (
