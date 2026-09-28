@@ -2,54 +2,33 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-
-    <!-- Viewport: viewport-fit=cover lets content extend behind Dynamic Island -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    />
+    <!-- viewport-fit=cover: 노치·다이내믹 아일랜드 뒤까지 화면을 쓴다 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="매일 룰렛이 정해 주는 방식으로 쓰는 일기" />
 
     <!--
-      Theme bootstrap — React가 마운트되기 전에 먼저 테마를 확정.
-      이렇게 해두면 첫 페인트부터 올바른 배경색이 적용되어 FOUC(배경 깜빡임)가 사라진다.
-      ThemeContext의 초기값 로직과 반드시 일치해야 한다.
+      React가 뜨기 전에 테마를 먼저 정해 첫 화면이 깜빡이지 않게 한다.
+      src/theme/theme.ts의 resolveInitialTheme, THEME_COLORS와 같은 규칙이어야 한다.
     -->
+    <meta name="theme-color" content="#f6f2ea" id="theme-color-meta" />
     <script>
       (function () {
+        var theme = 'light'
         try {
           var stored = localStorage.getItem('theme')
-          var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-          var theme = stored === 'light' || stored === 'dark'
-            ? stored
-            : (systemDark ? 'dark' : 'light')
-          document.documentElement.setAttribute('data-theme', theme)
-          // theme-color meta는 아래 meta 태그가 로드된 후 갱신
-          window.__initialTheme = theme
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'dark')
-          window.__initialTheme = 'dark'
-        }
+          if (stored === 'light' || stored === 'dark') theme = stored
+          else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark'
+        } catch (e) {}
+        document.documentElement.setAttribute('data-theme', theme)
+        document.getElementById('theme-color-meta').setAttribute('content', theme === 'dark' ? '#1b1916' : '#f6f2ea')
       })()
     </script>
 
-    <!-- PWA theme color — 부트 스크립트가 결정한 테마에 맞춰 JS가 갱신 -->
-    <meta name="theme-color" content="#0d1117" id="theme-color-meta" />
-    <script>
-      (function () {
-        var meta = document.getElementById('theme-color-meta')
-        if (meta && window.__initialTheme) {
-          meta.setAttribute('content', window.__initialTheme === 'dark' ? '#0d1117' : '#FFFDF8')
-        }
-      })()
-    </script>
-
-    <!-- iOS PWA -->
+    <!-- iOS 홈 화면 앱 -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- black-translucent: content fills behind Dynamic Island / status bar -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="일기 룰렛" />
 
-    <!-- Icons -->
     <link rel="icon" type="image/svg+xml" href="/Diaryroulette/favicon.svg" />
     <link rel="apple-touch-icon" href="/Diaryroulette/apple-touch-icon.png" />
 

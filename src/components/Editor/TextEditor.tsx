@@ -1,456 +1,175 @@
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Eye, Info, Lightbulb } from 'lucide-react'
+import type { Mission } from '../../data/missions'
+import { HEURISTIC_CHECKS, getOverLimitRange, getRuleHint, getRuleRanges, mergeRanges } from '../../lib/rules'
+import { countChars, stripHangul } from '../../lib/text'
 import ProgressBar from '../shared/ProgressBar'
-
-// ─── Korean syllable helpers ──────────────────────────────────────────────────
-
-const KOREAN_VOWEL_NAMES = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
-const KOREAN_CONSONANTS = ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
-
-// Adverbs to highlight for lang-5 (adjectives/adverbs must not be used)
-const LANG5_ADVERBS = ['매우', '아주', '너무', '정말', '참', '꽤', '상당히', '굉장히', '엄청', '조금', '약간', '많이', '빨리', '천천히', '갑자기', '드디어', '결국', '이미', '아직', '항상', '자주', '가끔', '거의', '모두', '함께', '혼자']
-
-function buildVowelSyllableSet(vowelChar: string): Set<string> {
-  const vowelIndex = KOREAN_VOWEL_NAMES.indexOf(vowelChar)
-  if (vowelIndex === -1) return new Set()
-  const set = new Set<string>()
-  // Korean syllables: 0xAC00 + (initial * 21 + vowel) * 28 + final
-  for (let initial = 0; initial < 19; initial++) {
-    for (let final = 0; final < 28; final++) {
-      const code = 0xac00 + (initial * 21 + vowelIndex) * 28 + final
-      set.add(String.fromCharCode(code))
-    }
-  }
-  return set
-}
-
-function getChoseong(char: string): string | null {
-  const code = char.charCodeAt(0)
-  if (code < 0xac00 || code > 0xd7a3) return null
-  const idx = Math.floor((code - 0xac00) / 28 / 21)
-  return KOREAN_CONSONANTS[idx] ?? null
-}
-
-// ─── Highlight logic ──────────────────────────────────────────────────────────
-
-type HighlightRange = { start: number; end: number; color: string }
-
-function getHighlights(
-  text: string,
-  missionId: string,
-  extraData?: Record<string, unknown>,
-  charLimit?: { min?: number; max?: number },
-): HighlightRange[] {
-  const ranges: HighlightRange[] = []
-
-  if (missionId === 'lang-2') {
-    // Highlight 이다/있다/없다 conjugations
-    const pattern = /[이있없](다|고|어|어서|지만|는데|으면|으니|었|겠)/g
-    let m: RegExpExecArray | null
-    while ((m = pattern.exec(text)) !== null) {
-      ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-    }
-  } else if (missionId === 'lang-3' && extraData?.bannedVowel) {
-    const bannedSet = buildVowelSyllableSet(String(extraData.bannedVowel))
-    for (let i = 0; i < text.length; i++) {
-      if (bannedSet.has(text[i])) {
-        ranges.push({ start: i, end: i + 1, color: '#ff4d4d' })
-      }
-    }
-  } else if (missionId === 'lang-4' && extraData?.allowedVowel) {
-    const allowedVowelIdx = KOREAN_VOWEL_NAMES.indexOf(String(extraData.allowedVowel))
-    for (let i = 0; i < text.length; i++) {
-      const code = text.charCodeAt(i)
-      if (code >= 0xac00 && code <= 0xd7a3) {
-        const jungseong = Math.floor((code - 0xac00) / 28) % 21
-        if (jungseong !== allowedVowelIdx) {
-          ranges.push({ start: i, end: i + 1, color: '#ff4d4d' })
-        }
-      }
-    }
-  } else if (missionId === 'lang-1') {
-    // Highlight probable nouns (red — player must NOT use nouns)
-    let m: RegExpExecArray | null
-    // Pattern: Korean word + noun particle → likely a noun+particle unit
-    const particlePattern = /([가-힣]+)(이|가|을|를|은|는|의|에서|에게|으로|로|과|와|도)(?=[\s\n]|$|[^가-힣])/g
-    while ((m = particlePattern.exec(text)) !== null) {
-      ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-    }
-    // Standalone Korean word (2+ chars) not ending in verb/adj suffixes
-    const verbAdjEndings = /[다고서며어아면니지게도록라기음자]$/
-    const wordPattern = /[가-힣]{2,}/g
-    while ((m = wordPattern.exec(text)) !== null) {
-      if (!verbAdjEndings.test(m[0])) {
-        const alreadyCovered = ranges.some(r => r.start <= m!.index && r.end > m!.index)
-        if (!alreadyCovered) {
-          ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-        }
-      }
-    }
-  } else if (missionId === 'lang-5') {
-    // Highlight probable adjectives and adverbs (red — player must NOT use these)
-    let m: RegExpExecArray | null
-    // Hardcoded adverb blocklist
-    for (const adv of LANG5_ADVERBS) {
-      const re = new RegExp(adv, 'g')
-      while ((m = re.exec(text)) !== null) {
-        ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-      }
-    }
-    // Adjectival endings: 하다/롭다/스럽다/답다/없다 conjugations
-    const adjPattern = /[가-힣]*(하|롭|스럽|답|없)(다|고|어|아|지만|는데|으면|으니|었|겠|게|워|여)/g
-    while ((m = adjPattern.exec(text)) !== null) {
-      ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-    }
-    // Adverb endings ~히, ~게 (preceded by Korean chars, followed by space/end/non-Korean)
-    const advEndingPattern = /[가-힣]+(히|게)(?=[\s\n]|$|[^가-힣])/g
-    while ((m = advEndingPattern.exec(text)) !== null) {
-      ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-    }
-  } else if (missionId === 'lang-6') {
-    // Sentence-level: first Korean syllable of each sentence must follow ㄱ→ㄴ→ㄷ…
-    const sentences: { start: number; end: number }[] = []
-    const terminatorPattern = /[.?!\n]/g
-    let m: RegExpExecArray | null
-    let lastEnd = 0
-    while ((m = terminatorPattern.exec(text)) !== null) {
-      if (m.index > lastEnd) {
-        sentences.push({ start: lastEnd, end: m.index })
-      }
-      lastEnd = m.index + 1
-    }
-    if (lastEnd < text.length) {
-      sentences.push({ start: lastEnd, end: text.length })
-    }
-    let validSentenceIdx = 0
-    sentences.forEach((sentence) => {
-      const rawSentence = text.slice(sentence.start, sentence.end)
-      const leadingWhitespace = rawSentence.length - rawSentence.trimStart().length
-      const actualStart = sentence.start + leadingWhitespace
-      // Find first Korean syllable in this sentence
-      let firstKoreanIdx = -1
-      for (let i = actualStart; i < sentence.end; i++) {
-        if (getChoseong(text[i]) !== null) {
-          firstKoreanIdx = i
-          break
-        }
-      }
-      if (firstKoreanIdx === -1) return // skip — do NOT increment validSentenceIdx
-      const expected = KOREAN_CONSONANTS[validSentenceIdx % KOREAN_CONSONANTS.length]
-      validSentenceIdx++
-      const actual = getChoseong(text[firstKoreanIdx])
-      if (actual !== expected) {
-        // Highlight from sentence start to end of first word
-        let wordEnd = firstKoreanIdx + 1
-        while (wordEnd < sentence.end && !/\s/.test(text[wordEnd])) wordEnd++
-        ranges.push({ start: actualStart, end: wordEnd, color: '#ff4d4d' })
-      }
-    })
-  } else if (missionId === 'lang-8') {
-    // Word-level: every Korean word's first syllable must follow ㄱ→ㄴ→ㄷ…
-    let wordIdx = 0
-    const wordPattern = /[가-힣]+/g
-    let m: RegExpExecArray | null
-    while ((m = wordPattern.exec(text)) !== null) {
-      const expected = KOREAN_CONSONANTS[wordIdx % KOREAN_CONSONANTS.length]
-      wordIdx++
-      const actual = getChoseong(m[0][0])
-      if (actual !== expected) {
-        ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-      }
-    }
-  } else if (missionId === 'creative-2') {
-    // Every sentence must end with '?'; highlight those that end with . ! or \n
-    const sentencePattern = /[^.?!\n]+[.!\n]/g
-    let m: RegExpExecArray | null
-    while ((m = sentencePattern.exec(text)) !== null) {
-      ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-    }
-  } else if (missionId === 'lang-9') {
-    // Every space-delimited word (어절) must be exactly 3 characters long
-    const tokenRe = /\S+/g
-    let m: RegExpExecArray | null
-    while ((m = tokenRe.exec(text)) !== null) {
-      if ([...m[0]].length !== 3) {
-        ranges.push({ start: m.index, end: m.index + m[0].length, color: '#ff4d4d' })
-      }
-    }
-  }
-
-  // time-3: highlight chars beyond max limit
-  if (charLimit?.max && text.length > charLimit.max) {
-    ranges.push({ start: charLimit.max, end: text.length, color: '#ef4444' })
-  }
-
-  return ranges
-}
-
-// Merge overlapping ranges and render highlighted HTML
-function renderHighlightedHTML(text: string, ranges: HighlightRange[]): string {
-  if (ranges.length === 0) {
-    return escapeHTML(text)
-  }
-
-  // Build per-character color map
-  const colorMap: Array<string | null> = new Array(text.length).fill(null)
-  for (const { start, end, color } of ranges) {
-    for (let i = start; i < Math.min(end, text.length); i++) {
-      colorMap[i] = color
-    }
-  }
-
-  let html = ''
-  let i = 0
-  while (i < text.length) {
-    const color = colorMap[i]
-    if (color) {
-      let j = i
-      while (j < text.length && colorMap[j] === color) j++
-      html += `<mark style="background:${color}33;border-bottom:2px solid ${color};border-radius:2px;color:inherit">${escapeHTML(text.slice(i, j))}</mark>`
-      i = j
-    } else {
-      let j = i
-      while (j < text.length && !colorMap[j]) j++
-      html += escapeHTML(text.slice(i, j))
-      i = j
-    }
-  }
-
-  return html
-}
-
-function escapeHTML(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // 현재 <mark> 태그의 속성값은 고정 색상 코드뿐이지만, 향후 미션 확장으로
-    // 사용자 입력이 속성값에 들어갈 경우에 대비한 defense in depth.
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/\n/g, '<br>')
-    .replace(/ /g, '&nbsp;')
-}
-
-// ─── Props ────────────────────────────────────────────────────────────────────
+import WritingArea from './WritingArea'
 
 interface TextEditorProps {
+  mission: Mission
   value: string
-  onChange: (val: string) => void
-  missionId: string
+  onChange: (value: string) => void
   extraData?: Record<string, unknown>
-  charLimit?: { min?: number; max?: number }
-  placeholder?: string
   readOnly?: boolean
-  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
-  /**
-   * textarea의 입력 이벤트. onKeyDown과 달리 붙여넣기/드래그앤드롭/IME 조합
-   * 완료 등 모든 value 변경을 포착한다. TimedTextEditor의 타이머 시작 트리거처럼
-   * "어떤 방식으로든 입력이 있었는가"를 감지해야 할 때 사용.
-   */
-  onInput?: (e: React.FormEvent<HTMLTextAreaElement>) => void
-  forceInvisible?: boolean
+  onUserInput?: () => void
+  placeholder?: string
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
+  /** 에디터 위에 끼워 넣을 요소(타이머 등) */
+  header?: React.ReactNode
 }
 
-// ─── Missions that need soft highlighting ─────────────────────────────────────
-
-const HIGHLIGHT_MISSIONS = new Set(['lang-1', 'lang-2', 'lang-3', 'lang-4', 'lang-5', 'lang-6', 'lang-8', 'lang-9', 'time-3', 'creative-2'])
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function TextEditor({
+  mission,
   value,
   onChange,
-  missionId,
   extraData,
-  charLimit,
-  placeholder = '오늘의 이야기를 시작하세요…',
-  readOnly = false,
-  onKeyDown,
-  onInput,
-  forceInvisible = false,
+  readOnly,
+  onUserInput,
+  placeholder,
+  textareaRef,
+  header,
 }: TextEditorProps) {
-  const overlayRef = useRef<HTMLDivElement>(null)
-  const needsHighlight = HIGHLIGHT_MISSIONS.has(missionId)
-  const [koreanWarning, setKoreanWarning] = useState(false)
-
-  const highlights = useMemo(() => {
-    if (!needsHighlight) return []
-    return getHighlights(value, missionId, extraData, charLimit)
-  }, [value, missionId, extraData, charLimit, needsHighlight])
-
-  const highlightedHTML = useMemo(() => {
-    if (!needsHighlight || highlights.length === 0) return ''
-    return renderHighlightedHTML(value, highlights)
-  }, [value, highlights, needsHighlight])
-
-  const syncOverlayScroll = useCallback((e: React.UIEvent<HTMLTextAreaElement>) => {
-    if (overlayRef.current) {
-      overlayRef.current.scrollTop = (e.target as HTMLTextAreaElement).scrollTop
-      overlayRef.current.scrollLeft = (e.target as HTMLTextAreaElement).scrollLeft
-    }
+  const [peeking, setPeeking] = useState(false)
+  const [koreanBlocked, setKoreanBlocked] = useState(false)
+  const warnTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (warnTimer.current) clearTimeout(warnTimer.current)
   }, [])
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    let val = e.target.value
-    if (missionId === 'lang-7') {
-      const filtered = val.replace(/[\uac00-\ud7a3\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\ud7b0-\ud7ff]/g, '')
-      if (filtered !== val) {
-        setKoreanWarning(true)
-        setTimeout(() => setKoreanWarning(false), 2000)
-      }
-      val = filtered
-    }
-    onChange(val)
-  }, [missionId, onChange])
+  const { charLimit } = mission
+  const usesLayer = Boolean(mission.check || charLimit?.max !== undefined)
 
-  // Next expected consonant for lang-8/lang-6 hint
-  const nextConsonant = useMemo(() => {
-    if (missionId === 'lang-6') {
-      // Count only segments (between terminators) that contain at least one Korean syllable
-      const terminatorPattern = /[.?!\n]/g
-      let m: RegExpExecArray | null
-      let lastEnd = 0
-      let validSentences = 0
-      while ((m = terminatorPattern.exec(value)) !== null) {
-        const segment = value.slice(lastEnd, m.index)
-        if (/[가-힣]/.test(segment)) validSentences++
-        lastEnd = m.index + 1
-      }
-      return KOREAN_CONSONANTS[validSentences % KOREAN_CONSONANTS.length]
-    }
-    if (missionId === 'lang-8') {
-      const wordCount = (value.match(/[가-힣]+/g) || []).length
-      return KOREAN_CONSONANTS[wordCount % KOREAN_CONSONANTS.length]
-    }
-    return ''
-  }, [value, missionId])
+  const ruleRanges = useMemo(
+    () => (mission.check ? getRuleRanges(value, mission, extraData) : []),
+    [value, mission, extraData],
+  )
+  const ranges = useMemo(() => {
+    if (!usesLayer) return undefined
+    const over = getOverLimitRange(value, charLimit?.max)
+    return mergeRanges(over ? [...ruleRanges, over] : ruleRanges)
+  }, [usesLayer, value, charLimit?.max, ruleRanges])
 
-  const charCount = value.length
-  const isOverMax = charLimit?.max !== undefined && charCount > charLimit.max
-  const isUnderMin = charLimit?.min !== undefined && charCount < charLimit.min
-  const showProgress = charLimit?.min !== undefined || charLimit?.max !== undefined
+  const hint = mission.check ? getRuleHint(value, mission) : null
+  const isHeuristic = mission.check ? HEURISTIC_CHECKS.has(mission.check) : false
+
+  const handleFiltered = () => {
+    setKoreanBlocked(true)
+    if (warnTimer.current) clearTimeout(warnTimer.current)
+    warnTimer.current = setTimeout(() => setKoreanBlocked(false), 2000)
+  }
+
+  const hidden = Boolean(mission.blackout) && !peeking
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Hint banner for highlighted missions */}
-      {needsHighlight && (
-        <div
-          className="text-xs rounded-lg px-3 py-2"
-          style={{
-            background: 'rgba(217, 119, 6, 0.15)',
-            border: '1px solid rgba(217, 119, 6, 0.5)',
-            color: 'var(--color-text)',
-          }}
-        >
-          💡 참고용 힌트입니다 — 절대적 기준이 아닙니다
+      {header}
+
+      {(hint || mission.noDelete || koreanBlocked) && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {hint && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent-soft px-3 py-1.5 font-medium text-ink">
+              <Lightbulb className="h-4 w-4 text-accent" aria-hidden="true" />
+              {hint}
+            </span>
+          )}
+          {mission.noDelete && (
+            <span className="rounded-lg bg-card px-3 py-1.5 text-ink-mid">지우기 없이 앞으로만 써요</span>
+          )}
+          {koreanBlocked && (
+            <span role="status" className="rounded-lg bg-danger-soft px-3 py-1.5 text-danger">
+              한글은 입력되지 않아요
+            </span>
+          )}
         </div>
       )}
 
-      {/* Consonant order hint for lang-8/lang-6 */}
-      {(missionId === 'lang-8' || missionId === 'lang-6') && (
-        <div
-          className="text-xs rounded-lg px-3 py-2"
-          style={{
-            background: 'rgba(59, 130, 246, 0.15)',
-            border: '1px solid rgba(59, 130, 246, 0.5)',
-            color: 'var(--color-text)',
-          }}
+      <WritingArea
+        value={value}
+        onChange={onChange}
+        ranges={ranges}
+        hidden={hidden}
+        readOnly={readOnly}
+        noDelete={mission.noDelete}
+        filter={mission.noHangul ? stripHangul : undefined}
+        onFiltered={handleFiltered}
+        onUserInput={onUserInput}
+        placeholder={placeholder ?? mission.placeholder ?? (mission.blackout ? '어둠 속에서 써 내려가 보세요…' : '오늘 이야기를 시작해 보세요…')}
+        ariaLabel={`${mission.title} 일기`}
+        textareaRef={textareaRef}
+      />
+
+      {mission.blackout && (
+        <button
+          type="button"
+          className="btn-secondary self-start text-sm"
+          onPointerDown={() => setPeeking(true)}
+          onPointerUp={() => setPeeking(false)}
+          onPointerLeave={() => setPeeking(false)}
+          onPointerCancel={() => setPeeking(false)}
+          onKeyDown={(e) => (e.key === ' ' || e.key === 'Enter') && setPeeking(true)}
+          onKeyUp={() => setPeeking(false)}
+          onContextMenu={(e) => e.preventDefault()}
         >
-          {missionId === 'lang-6'
-            ? <>다음 문장은 &apos;{nextConsonant}&apos;으로 시작해야 합니다</>
-            : <>다음 단어는 &apos;{nextConsonant}&apos;으로 시작해야 합니다</>}
-        </div>
+          <Eye className="h-4 w-4" />
+          꾹 눌러 보기
+        </button>
       )}
 
-      {/* Question-only hint for creative-2 */}
-      {missionId === 'creative-2' && (
-        <div
-          className="text-xs rounded-lg px-3 py-2"
-          style={{
-            background: 'rgba(59, 130, 246, 0.15)',
-            border: '1px solid rgba(59, 130, 246, 0.5)',
-            color: 'var(--color-text)',
-          }}
-        >
-          모든 문장은 물음표(?)로 끝나야 합니다
-        </div>
-      )}
+      <EditorFooter
+        value={value}
+        charLimit={charLimit}
+        violations={ruleRanges.length}
+        isHeuristic={isHeuristic}
+        showViolations={Boolean(mission.check) && !hidden}
+      />
+    </div>
+  )
+}
 
-      {/* Korean input warning for lang-7 */}
-      {koreanWarning && (
-        <div
-          className="text-xs rounded-lg px-3 py-2"
-          style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.5)',
-            color: 'var(--color-text)',
-          }}
-        >
-          한국어는 사용할 수 없습니다 / Korean is not allowed
-        </div>
-      )}
+function EditorFooter({
+  value,
+  charLimit,
+  violations,
+  isHeuristic,
+  showViolations,
+}: {
+  value: string
+  charLimit?: { min?: number; max?: number }
+  violations: number
+  isHeuristic: boolean
+  showViolations: boolean
+}) {
+  const count = countChars(value)
+  const { min, max } = charLimit ?? {}
+  const over = max !== undefined && count > max
+  const under = min !== undefined && count < min
+  const inRange = charLimit !== undefined && !over && !under
 
-      {/* Editor area */}
-      <div className="relative">
-        {/* Highlight overlay (only when needed) */}
-        {needsHighlight && (
-          <div
-            ref={overlayRef}
-            aria-hidden="true"
-            className="absolute inset-px p-4 pointer-events-none overflow-hidden whitespace-pre-wrap break-words leading-relaxed rounded-xl"
-            style={{
-              fontFamily: 'inherit',
-              fontSize: '16px',
-              lineHeight: '1.625',
-              color: 'var(--color-text)',
-              zIndex: 3,
-            }}
-            dangerouslySetInnerHTML={{ __html: highlightedHTML || escapeHTML(value) }}
-          />
-        )}
+  let counter = `${count.toLocaleString()}자`
+  if (max !== undefined) counter = `${count.toLocaleString()} / ${max.toLocaleString()}자`
+  else if (min !== undefined) counter = `${count.toLocaleString()} / ${min.toLocaleString()}자`
 
-        <textarea
-          value={value}
-          onChange={handleChange}
-          onScroll={needsHighlight ? syncOverlayScroll : undefined}
-          onKeyDown={onKeyDown}
-          onInput={onInput}
-          readOnly={readOnly}
-          placeholder={placeholder}
-          className="w-full min-h-64 p-4 rounded-xl border text-sm leading-relaxed resize-y outline-none transition-colors"
-          style={{
-            background: 'var(--color-surface)',
-            borderColor: isOverMax ? '#ef4444' : 'var(--color-border)',
-            color: (forceInvisible || needsHighlight) ? 'transparent' : 'var(--color-text)',
-            caretColor: 'var(--color-text)',
-            fontFamily: 'inherit',
-            position: 'relative',
-            zIndex: 2,
-          }}
-          spellCheck={false}
-        />
-      </div>
-
-      {/* Char counter + progress */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex-1">
-          {showProgress && charLimit?.min && (
-            <ProgressBar
-              value={charCount}
-              max={charLimit.min}
-              color={isUnderMin ? '#d97706' : '#65a30d'}
-              height={4}
-            />
+  return (
+    <div className="space-y-2">
+      {min !== undefined && <ProgressBar value={count} max={min} color={under ? 'var(--color-accent)' : 'var(--color-success)'} label="글자 수" />}
+      <div className="flex items-start justify-between gap-4 text-sm">
+        <div className="min-w-0 text-muted">
+          {showViolations && violations > 0 && (
+            <p className="flex items-start gap-1.5">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                밑줄 친 {violations}곳이 규칙과 달라 보여요.
+                {isHeuristic && ' 자동으로 짐작한 거라 틀릴 수 있어요.'}
+              </span>
+            </p>
           )}
         </div>
         <span
-          className="text-xs shrink-0"
-          style={{ color: isOverMax ? '#ef4444' : 'var(--color-muted)' }}
+          className={`shrink-0 tabular-nums ${over ? 'font-semibold text-danger' : inRange ? 'font-semibold text-success' : 'text-muted'}`}
+          aria-live="polite"
         >
-          {charCount}
-          {charLimit?.max && ` / ${charLimit.max}`}
-          {!charLimit?.max && charLimit?.min && ` / ${charLimit.min} 목표`}
-          자
+          {counter}
         </span>
       </div>
     </div>

@@ -1,334 +1,128 @@
-import { useEffect, useRef, useState } from 'react'
-import { missions, getCategoryColors } from '../../data/missions'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useEffect, useRef } from 'react'
+import { missions, type Mission } from '../../data/missions'
+import { CATEGORIES, CATEGORY_ORDER } from '../../data/categories'
 
-const ROW_HEIGHT = 64
-const VISIBLE_ROWS = 5
-const WINDOW_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS // 320px
-const CENTER_ROW = 2 // 0-indexed center row (rows 0–4, center is row 2)
-const REPEATS = 4 // how many times to repeat the mission list in the drum
-const TARGET_REPEAT = 2 // which repetition the result lands on (0-indexed)
-const SPIN_DURATION_DEFAULT = 3000 // ms — 정상 모드
-const SPIN_DURATION_REDUCED = 1    // ms — prefers-reduced-motion 사용자
+const ROW = 56
+const VISIBLE = 5
+const CENTER = 2
+const REPEATS = 4
+/** 결과가 멈추는 반복 회차 — 충분히 돌아가 보이도록 뒤쪽 회차에 착지 */
+const TARGET_REPEAT = 2
+const SPIN_MS = 2800
 
-// Build the long drum list: REPEATS * 36 items
-const DRUM_ITEMS = Array.from({ length: REPEATS }, () => missions).flat()
-
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3)
+/** 같은 카테고리가 몰려 보이지 않게 카테고리를 번갈아 늘어놓는다 */
+function interleave(list: Mission[]): Mission[] {
+  const buckets = CATEGORY_ORDER.map((c) => list.filter((m) => m.category === c))
+  const out: Mission[] = []
+  for (let i = 0; out.length < list.length; i++) {
+    for (const b of buckets) if (b[i]) out.push(b[i])
+  }
+  return out
 }
 
-/**
- * prefers-reduced-motion: reduce 현재값을 구독한다.
- * iOS "설정 → 손쉬운 사용 → 동작 → 동작 줄이기"를 켠 사용자가 3초 애니메이션으로
- * 멀미를 겪지 않도록, 이 설정이 켜져 있으면 슬롯머신을 즉시 결과에 착지시킨다.
- */
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState<boolean>(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return false
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  })
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
-  return reduced
+const ORDER = interleave(missions)
+const DRUM = Array.from({ length: REPEATS }, () => ORDER).flat()
+/** 대기 중에는 두 번째 회차 첫 칸을 가운데 두어 위아래가 비어 보이지 않게 한다 */
+const IDLE_Y = -(ORDER.length * ROW) + CENTER * ROW
+
+function finalYFor(index: number) {
+  return -((TARGET_REPEAT * ORDER.length + index) * ROW) + CENTER * ROW
 }
 
-function computeFinalY(missionIndex: number): number {
-  const targetDrumIndex = TARGET_REPEAT * missions.length + missionIndex
-  // translateY to center the target item
-  return -(targetDrumIndex * ROW_HEIGHT) + CENTER_ROW * ROW_HEIGHT
+function easeOutQuart(t: number) {
+  return 1 - Math.pow(1 - t, 4)
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 }
 
 interface SlotMachinePickerProps {
   targetMissionId: string | null
-  isSpinning: boolean
+  spinning: boolean
   onSpinComplete: () => void
 }
 
-export default function SlotMachinePicker({
-  targetMissionId,
-  isSpinning,
-  onSpinComplete,
-}: SlotMachinePickerProps) {
-  const [translateY, setTranslateY] = useState(CENTER_ROW * ROW_HEIGHT)
-  const [phase, setPhase] = useState<'idle' | 'spinning' | 'done'>('idle')
-  const [centeredIndex, setCenteredIndex] = useState<number>(-1) // drum index of centered item
-  const { theme } = useTheme()
-  const categoryColors = getCategoryColors(theme)
-  const reducedMotion = usePrefersReducedMotion()
-  const SPIN_DURATION = reducedMotion ? SPIN_DURATION_REDUCED : SPIN_DURATION_DEFAULT
+export default function SlotMachinePicker({ targetMissionId, spinning, onSpinComplete }: SlotMachinePickerProps) {
+  const drumRef = useRef<HTMLDivElement>(null)
+  const onCompleteRef = useRef(onSpinComplete)
+  useEffect(() => {
+    onCompleteRef.current = onSpinComplete
+  }, [onSpinComplete])
 
-  const rafRef = useRef<number | null>(null)
-  const startTimeRef = useRef<number | null>(null)
-  const startYRef = useRef(0)
-  const endYRef = useRef(0)
-  const onSpinCompleteRef = useRef(onSpinComplete)
-  onSpinCompleteRef.current = onSpinComplete
-
-  // Compute the final translateY whenever we know the target
-  const missionIndex =
-    targetMissionId !== null
-      ? missions.findIndex((m) => m.id === targetMissionId)
-      : -1
-  const finalY = missionIndex >= 0 ? computeFinalY(missionIndex) : 0
-  const finalDrumIndex = missionIndex >= 0 ? TARGET_REPEAT * missions.length + missionIndex : -1
+  const targetIndex = targetMissionId ? ORDER.findIndex((m) => m.id === targetMissionId) : -1
+  const landedIndex = !spinning && targetIndex >= 0 ? TARGET_REPEAT * ORDER.length + targetIndex : -1
+  const restingY = !spinning && targetIndex >= 0 ? finalYFor(targetIndex) : IDLE_Y
 
   useEffect(() => {
-    if (isSpinning && targetMissionId !== null && missionIndex >= 0) {
-      // Cancel any existing animation
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-      startTimeRef.current = null
-      startYRef.current = translateY
-      endYRef.current = finalY
-      setPhase('spinning')
-
-      function animate(timestamp: number) {
-        if (!startTimeRef.current) startTimeRef.current = timestamp
-        const elapsed = timestamp - startTimeRef.current
-        const t = Math.min(elapsed / SPIN_DURATION, 1)
-        const eased = easeOutCubic(t)
-        const current = startYRef.current + (endYRef.current - startYRef.current) * eased
-        setTranslateY(current)
-
-        if (t < 1) {
-          rafRef.current = requestAnimationFrame(animate)
-        } else {
-          // Land exactly on finalY
-          setTranslateY(endYRef.current)
-          setCenteredIndex(finalDrumIndex)
-          setPhase('done')
-          // Bounce 애니메이션은 reduced-motion 사용자에겐 생략 — 즉시 완료 콜백.
-          if (reducedMotion) {
-            onSpinCompleteRef.current()
-            return
-          }
-          // Bounce: drive +4px overshoot and return over 150ms via rAF loop
-          const baseY = endYRef.current
-          const bounceDuration = 150
-          let bounceStartTime: number | null = null
-          function bounceFrame(timestamp: number) {
-            if (bounceStartTime === null) bounceStartTime = timestamp
-            const elapsed = timestamp - bounceStartTime
-            const t = Math.min(elapsed / bounceDuration, 1)
-            const offset = t < 0.5
-              ? 4 * (t / 0.5)
-              : 4 * (1 - (t - 0.5) / 0.5)
-            setTranslateY(baseY + offset)
-            if (t < 1) {
-              rafRef.current = requestAnimationFrame(bounceFrame)
-            } else {
-              setTranslateY(baseY)
-              onSpinCompleteRef.current()
-            }
-          }
-          rafRef.current = requestAnimationFrame(bounceFrame)
-        }
-      }
-
-      rafRef.current = requestAnimationFrame(animate)
-    } else if (!isSpinning && targetMissionId !== null && missionIndex >= 0) {
-      // Already drawn today — snap immediately to result
-      setTranslateY(finalY)
-      setCenteredIndex(finalDrumIndex)
-      setPhase('done')
-    } else if (!isSpinning && targetMissionId === null) {
-      // Nothing drawn yet — show idle center (first mission)
-      setTranslateY(CENTER_ROW * ROW_HEIGHT)
-      setCenteredIndex(-1)
-      setPhase('idle')
+    if (!spinning || targetIndex < 0) return
+    const drum = drumRef.current
+    const endY = finalYFor(targetIndex)
+    if (!drum || prefersReducedMotion()) {
+      onCompleteRef.current()
+      return
     }
 
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    let raf = 0
+    let start: number | null = null
+    const frame = (ts: number) => {
+      if (start === null) start = ts
+      const t = Math.min((ts - start) / SPIN_MS, 1)
+      drum.style.transform = `translateY(${IDLE_Y + (endY - IDLE_Y) * easeOutQuart(t)}px)`
+      if (t < 1) raf = requestAnimationFrame(frame)
+      else onCompleteRef.current()
     }
-    // reducedMotion은 의존성에서 의도적으로 제외 — 스핀 도중 설정이 바뀌어도
-    // 현재 애니메이션은 시작 시점의 설정을 따라간다. 다음 스핀부터 새 값이 반영됨.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSpinning, targetMissionId])
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [spinning, targetIndex])
 
   return (
     <div
-      style={{
-        position: 'relative',
-        width: 320,
-        height: WINDOW_HEIGHT,
-        overflow: 'hidden',
-        background: 'var(--color-bg-nav)',
-        backdropFilter: 'blur(12px)',
-        borderRadius: 16,
-        border: '1px solid var(--color-border)',
-      }}
+      className="relative w-full max-w-[360px] overflow-hidden rounded-2xl border border-line bg-surface"
+      style={{ height: ROW * VISIBLE }}
+      aria-hidden="true"
     >
-      {/* Left-edge tick marks (slot machine feel) */}
+      {targetIndex < 0 && !spinning && (
+        <div
+          className="absolute inset-x-3 z-10 flex items-center justify-center rounded-xl bg-surface text-sm text-muted"
+          style={{ top: CENTER * ROW + 4, height: ROW - 8 }}
+        >
+          어떤 미션이 나올까요?
+        </div>
+      )}
+      {/* 가운데 결과 칸 표시 */}
       <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 4,
-          background: 'var(--color-card)',
-          zIndex: 4,
-        }}
-      >
-        {Array.from({ length: VISIBLE_ROWS }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              top: i * ROW_HEIGHT + ROW_HEIGHT / 2 - 1,
-              left: 0,
-              width: 8,
-              height: 2,
-              background: i === CENTER_ROW ? '#58a6ff' : 'var(--color-border)',
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Center highlight band */}
+        className="pointer-events-none absolute inset-x-3 z-10 rounded-xl border-2 border-accent"
+        style={{ top: CENTER * ROW + 4, height: ROW - 8 }}
+      />
       <div
-        style={{
-          position: 'absolute',
-          top: CENTER_ROW * ROW_HEIGHT,
-          left: 0,
-          right: 0,
-          height: ROW_HEIGHT,
-          background: 'rgba(88,166,255,0.06)',
-          borderTop: '1px solid rgba(88,166,255,0.20)',
-          borderBottom: '1px solid rgba(88,166,255,0.20)',
-          zIndex: 1,
-          pointerEvents: 'none',
-        }}
+        className="pointer-events-none absolute inset-x-0 top-0 z-20"
+        style={{ height: ROW * 1.6, background: 'linear-gradient(var(--color-surface), transparent)' }}
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-20"
+        style={{ height: ROW * 1.6, background: 'linear-gradient(transparent, var(--color-surface))' }}
       />
 
-      {/* Top fade */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 112,
-          background: 'linear-gradient(to bottom, var(--color-bg), transparent)',
-          zIndex: 3,
-          pointerEvents: 'none',
-        }}
-      />
-      {/* Bottom fade */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 112,
-          background: 'linear-gradient(to top, var(--color-bg), transparent)',
-          zIndex: 3,
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* Scrolling drum */}
-      <div
-        style={{
-          transform: `translateY(${translateY}px)`,
-          willChange: 'transform',
-        }}
-      >
-        {DRUM_ITEMS.map((mission, i) => {
-          const isCenter = i === centeredIndex
-          const colors = categoryColors[mission.category]
+      <div ref={drumRef} style={{ transform: `translateY(${restingY}px)`, willChange: 'transform' }}>
+        {DRUM.map((mission, i) => {
+          const landed = i === landedIndex
+          const meta = CATEGORIES[mission.category]
           return (
-            <div
-              key={i}
-              style={{
-                height: ROW_HEIGHT,
-                display: 'flex',
-                alignItems: 'center',
-                paddingLeft: 20,
-                paddingRight: 12,
-                borderLeft: isCenter
-                  ? `3px solid ${colors.border}`
-                  : '3px solid transparent',
-                opacity: isCenter ? 1 : 0.35,
-                filter: isCenter ? 'none' : 'blur(1px)',
-                transition: 'opacity 0.2s, filter 0.2s',
-              }}
-            >
-              {isCenter && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: 4,
-                    top: CENTER_ROW * ROW_HEIGHT + 8,
-                    bottom: (VISIBLE_ROWS - CENTER_ROW - 1) * ROW_HEIGHT + 8,
-                    width: 3,
-                    background: colors.bg,
-                    borderRadius: 2,
-                  }}
-                />
-              )}
+            <div key={i} className="flex items-center gap-3 px-6" style={{ height: ROW }}>
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: meta.color }} />
               <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: isCenter ? 600 : 400,
-                  color: isCenter ? 'var(--color-text)' : 'var(--color-muted)',
-                  letterSpacing: '0.01em',
-                  lineHeight: 1.3,
-                  paddingLeft: 8,
-                  userSelect: 'none',
-                }}
+                className={`min-w-0 flex-1 truncate ${
+                  landed ? 'font-serif text-base font-bold text-ink' : 'text-[15px] text-muted'
+                }`}
               >
                 {mission.title}
               </span>
-              {isCenter && (
-                <span
-                  style={{
-                    marginLeft: 'auto',
-                    fontSize: 10,
-                    color: colors.text,
-                    background: colors.bg + '33',
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 4,
-                    padding: '1px 6px',
-                    flexShrink: 0,
-                  }}
-                >
-                  {mission.category}
-                </span>
-              )}
+              {landed && <span className="shrink-0 text-xs text-muted">{meta.label}</span>}
             </div>
           )
         })}
       </div>
-
-      {/* Idle placeholder when nothing has been drawn */}
-      {phase === 'idle' && (
-        <div
-          style={{
-            position: 'absolute',
-            top: CENTER_ROW * ROW_HEIGHT,
-            left: 0,
-            right: 0,
-            height: ROW_HEIGHT,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 5,
-            pointerEvents: 'none',
-          }}
-        >
-          <span style={{ color: '#58a6ff', fontSize: 12, opacity: 0.7 }}>
-            버튼을 눌러 미션을 뽑으세요
-          </span>
-        </div>
-      )}
     </div>
   )
 }

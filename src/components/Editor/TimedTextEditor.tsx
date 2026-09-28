@@ -1,204 +1,104 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Timer, EyeOff, Eye } from 'lucide-react'
-import TextEditor from './TextEditor'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Timer } from 'lucide-react'
+import type { Mission } from '../../data/missions'
 import ProgressBar from '../shared/ProgressBar'
-import { type Mission } from '../../data/missions'
+import TextEditor from './TextEditor'
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(Math.abs(seconds) / 60)
-  const s = Math.abs(seconds) % 60
-  const sign = seconds < 0 ? '-' : ''
-  return `${sign}${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+function formatClock(seconds: number): string {
+  const s = Math.max(0, seconds)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 interface TimedTextEditorProps {
+  mission: Mission & { timerSeconds: number }
   value: string
-  onChange: (val: string) => void
-  mission: Mission
+  onChange: (value: string) => void
   extraData?: Record<string, unknown>
-  onTimerReady?: (canComplete: boolean) => void
+  /** 임시저장에서 복원한 경과 시간(초). 다시 들어와도 시간이 처음부터 시작되지 않는다. */
+  initialElapsed: number
+  onElapsedChange: (seconds: number) => void
 }
 
+/**
+ * 카운트다운 글쓰기. 첫 입력에서 시작하고 시간이 끝나면 더 쓸 수 없다.
+ * 시간은 시작 시각 기준으로 계산하므로 탭이 백그라운드여도 느려지지 않는다.
+ */
 export default function TimedTextEditor({
+  mission,
   value,
   onChange,
-  mission,
   extraData,
-  onTimerReady,
+  initialElapsed,
+  onElapsedChange,
 }: TimedTextEditorProps) {
-  const isBlackout = mission.id === 'time-5'
-  const timerSeconds = mission.timerSeconds ?? null
-  const isCountdown = timerSeconds !== null
-  const charMin = mission.charLimit?.min ?? null
-  const backspaceDisabled = mission.backspaceDisabled ?? false
-
-  const [elapsed, setElapsed] = useState(0)
-  const [started, setStarted] = useState(false)
-  const [revealed, setRevealed] = useState(false) // blackout reveal state
-  const [celebrated, setCelebrated] = useState(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // Start timer on first input event.
-  // onKeyDown만 감지하면 붙여넣기/드래그앤드롭/IME 완료/모바일 자동완성 탭으로
-  // 타이머를 우회할 수 있으므로, 모든 value 변경을 포착하는 onInput으로 트리거한다.
-  const startTimer = useCallback(() => {
-    if (started) return
-    setStarted(true)
-    onTimerReady?.(true)
-    intervalRef.current = setInterval(() => {
-      setElapsed((e) => e + 1)
-    }, 1000)
-  }, [started, onTimerReady])
-
-  // Clean up on unmount
+  const total = mission.timerSeconds
+  const [elapsed, setElapsed] = useState(() => Math.min(initialElapsed, total))
+  const [running, setRunning] = useState(false)
+  const startedAtRef = useRef<number | null>(null)
+  const onElapsedRef = useRef(onElapsedChange)
   useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [])
+    onElapsedRef.current = onElapsedChange
+  }, [onElapsedChange])
 
-  const timeRemaining = isCountdown ? (timerSeconds ?? 0) - elapsed : elapsed
-  const isTimeUp = isCountdown && elapsed >= (timerSeconds ?? 0)
+  const timeUp = elapsed >= total
 
-  // Stop interval when time is up
+  const start = useCallback(() => {
+    if (startedAtRef.current !== null || timeUp) return
+    startedAtRef.current = Date.now() - elapsed * 1000
+    setRunning(true)
+  }, [elapsed, timeUp])
+
   useEffect(() => {
-    if (isTimeUp && intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-  }, [isTimeUp])
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (backspaceDisabled && e.key === 'Backspace') {
-        e.preventDefault()
-        return
+    if (!running) return
+    const id = setInterval(() => {
+      const next = Math.min(total, Math.floor((Date.now() - (startedAtRef.current ?? Date.now())) / 1000))
+      setElapsed(next)
+      onElapsedRef.current(next)
+      if (next >= total) {
+        clearInterval(id)
+        setRunning(false)
       }
-      // 타이머 시작은 onInput에서 담당. 여기서는 백스페이스 차단만.
-    },
-    [backspaceDisabled],
-  )
+    }, 250)
+    return () => clearInterval(id)
+  }, [running, total])
 
-  const handleInput = useCallback(() => {
-    startTimer()
-  }, [startTimer])
+  const remaining = total - elapsed
+  const urgent = running && remaining <= 10
 
-  const handleChange = useCallback(
-    (val: string) => {
-      // celebrated는 가역적으로 — 목표 달성 후 삭제하면 다시 아래로 내려감.
-      if (charMin) {
-        setCelebrated(val.length >= charMin)
-      }
-      onChange(val)
-    },
-    [onChange, charMin],
+  let status = '첫 글자를 쓰면 시작해요'
+  if (timeUp) status = '시간이 다 됐어요. 완료를 눌러 저장하세요.'
+  else if (running) status = '멈추지 말고 계속 써요'
+  else if (elapsed > 0) status = '이어서 쓰면 남은 시간부터 다시 가요'
+
+  const header = (
+    <div className="panel px-4 py-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Timer className={`h-5 w-5 ${urgent || timeUp ? 'text-danger' : 'text-accent'}`} aria-hidden="true" />
+          <span
+            className={`font-mono text-2xl font-bold tabular-nums ${urgent || timeUp ? 'text-danger' : 'text-ink'}`}
+            role="timer"
+            aria-label={`남은 시간 ${formatClock(remaining)}`}
+          >
+            {formatClock(remaining)}
+          </span>
+        </div>
+        <span className="text-right text-sm text-muted">{status}</span>
+      </div>
+      <ProgressBar value={remaining} max={total} color={urgent || timeUp ? 'var(--color-danger)' : 'var(--color-accent)'} label="남은 시간" />
+    </div>
   )
 
   return (
-    // relative 컨테이너 — 블랙아웃 오버레이가 이 영역만 덮도록 스코프 한정.
-    // 이전에는 fixed inset-0로 헤더/탭바까지 가려 탈출구가 사라지는 문제가 있었다.
-    <div className="flex flex-col gap-4 relative">
-      {/* Timer display — hidden when showTimer is false */}
-      {mission.showTimer !== false && (
-        <div
-          className={`flex items-center justify-between p-4 rounded-xl border${isBlackout && !revealed ? ' relative z-50' : ''}`}
-          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-        >
-          <div className="flex items-center gap-3">
-            <Timer className="w-5 h-5 text-amber-400" />
-            <span
-              className="text-2xl font-mono font-bold tabular-nums"
-              style={{
-                color: isTimeUp
-                  ? '#ef4444'
-                  : isCountdown && timeRemaining < 10
-                  ? '#f97316'
-                  : 'var(--color-text)',
-              }}
-            >
-              {formatTime(timeRemaining)}
-            </span>
-            {!started && (
-              <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                첫 타이핑 시 시작됩니다
-              </span>
-            )}
-            {isTimeUp && <span className="text-xs text-red-400 animate-pulse">시간 종료!</span>}
-          </div>
-        </div>
-      )}
-
-      {/* Blackout toggle — standalone row, visible even when timer is hidden */}
-      {isBlackout && (
-        <div className="flex justify-end relative z-50">
-          <button
-            type="button"
-            onClick={() => setRevealed((r) => !r)}
-            className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border transition-colors"
-            style={{
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-muted)',
-              background: 'var(--color-card)',
-            }}
-          >
-            {revealed ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-            {revealed ? '가리기' : '미리보기'}
-          </button>
-        </div>
-      )}
-
-      {/* charMin progress bar */}
-      {charMin && (
-        <div>
-          <ProgressBar
-            value={value.length}
-            max={charMin}
-            color={celebrated ? '#65a30d' : '#d97706'}
-            height={6}
-            label={celebrated ? '🎉 목표 달성!' : `목표: ${charMin}자`}
-            showText
-          />
-          {backspaceDisabled && (
-            <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
-              ⚠️ 백스페이스 사용 불가
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Blackout overlay — absolute(에디터 컨테이너 기준)로 스코프 한정.
-          헤더/탭바는 덮지 않아 사용자가 언제든 화면을 벗어날 수 있다.
-          pointer-events-none으로 에디터 상호작용은 그대로 통과된다. */}
-      {isBlackout && !revealed && (
-        <div
-          className="absolute inset-0 z-40 pointer-events-none rounded-xl"
-          style={{ background: 'rgba(0,0,0,0.97)' }}
-        >
-          <div className="absolute top-4 left-0 right-0 flex justify-center">
-            <p className="text-slate-600 text-sm">어둠 속에서 써 내려가세요…</p>
-          </div>
-        </div>
-      )}
-
-      {/* Editor — forceInvisible hides text during blackout while keeping caret visible */}
-      <div>
-        <TextEditor
-          value={value}
-          onChange={handleChange}
-          missionId={mission.id}
-          extraData={extraData}
-          charLimit={mission.charLimit}
-          onKeyDown={handleKeyDown}
-          onInput={handleInput}
-          readOnly={isTimeUp}
-          forceInvisible={isBlackout && !revealed}
-          placeholder={
-            isBlackout
-              ? '어둠 속에서 자유롭게 써 보세요. 저장하면 내용이 드러납니다…'
-              : '타이핑을 시작하면 타이머가 시작됩니다…'
-          }
-        />
-      </div>
-    </div>
+    <TextEditor
+      mission={mission}
+      value={value}
+      onChange={onChange}
+      extraData={extraData}
+      readOnly={timeUp}
+      onUserInput={start}
+      header={header}
+      placeholder="첫 글자를 쓰는 순간 타이머가 시작돼요…"
+    />
   )
 }

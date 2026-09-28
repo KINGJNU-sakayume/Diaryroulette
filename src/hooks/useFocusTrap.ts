@@ -1,21 +1,14 @@
 import { useEffect, useRef } from 'react'
 
 /**
- * 모달/다이얼로그 접근성 훅.
+ * 모달 접근성 훅.
+ *   1. Tab/Shift+Tab이 모달 안에서만 돈다
+ *   2. Esc로 닫는다
+ *   3. 열릴 때 첫 포커스 대상(또는 initialFocusRef)으로 이동
+ *   4. 닫힐 때 원래 포커스로 되돌린다 (VoiceOver가 읽을 위치를 잃지 않도록)
  *
- * 제공하는 기능:
- *   1. Tab/Shift+Tab이 컨테이너 내부 포커스 가능 요소 사이에서만 순환
- *   2. Esc 키로 닫기
- *   3. 활성화 시 첫 번째 포커스 가능 요소(또는 initialFocusRef)로 자동 포커스
- *   4. 비활성화 시 이전에 포커스되어 있던 요소로 복원 — VoiceOver(iOS)가
- *      모달 닫힘 직후 읽을 위치를 결정하는 데 핵심적.
- *
- * iOS Safari <dialog> 대신 이 훅을 쓰는 이유는 결정 1 참조.
- *
- * @param active 훅을 활성화할지 여부 (모달 열림 상태)
- * @param onClose ESC 눌렀을 때 호출될 콜백
- * @param initialFocusRef 처음 포커스할 요소(생략 시 첫 번째 포커스 가능 요소)
- * @returns containerRef — 모달 컨테이너 div에 ref로 연결
+ * onClose는 ref로 들고 있어서, 호출하는 쪽이 매 렌더마다 새 함수를 넘겨도
+ * 포커스가 튀지 않는다.
  */
 export function useFocusTrap<T extends HTMLElement>(
   active: boolean,
@@ -23,88 +16,63 @@ export function useFocusTrap<T extends HTMLElement>(
   initialFocusRef?: React.RefObject<HTMLElement | null>,
 ) {
   const containerRef = useRef<T | null>(null)
-  // 활성화 직전 포커스를 가졌던 요소. 비활성화 시 복원 대상.
-  const previouslyFocusedRef = useRef<Element | null>(null)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!active) return
+    const previouslyFocused = document.activeElement
 
-    // 1. 현재 포커스된 요소 기억 → 나중에 복원
-    previouslyFocusedRef.current = document.activeElement
-
-    // 2. 초기 포커스 이동
-    //    rAF로 미루어 모달 DOM이 실제로 마운트·페인트된 후에 포커스가 들어가도록.
     const focusRaf = requestAnimationFrame(() => {
-      const target =
-        initialFocusRef?.current ??
-        getFirstFocusable(containerRef.current) ??
-        containerRef.current
+      const target = initialFocusRef?.current ?? getFocusableElements(containerRef.current)[0] ?? containerRef.current
       target?.focus()
     })
 
-    // 3. 키 이벤트 핸들러
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && onClose) {
+      if (e.key === 'Escape' && onCloseRef.current) {
         e.preventDefault()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab') return
-
       const container = containerRef.current
       if (!container) return
       const focusables = getFocusableElements(container)
       if (focusables.length === 0) {
-        // 포커스 가능 요소가 없으면 컨테이너 자체에 포커스 유지
         e.preventDefault()
         container.focus()
         return
       }
-
       const first = focusables[0]
       const last = focusables[focusables.length - 1]
-      const activeEl = document.activeElement
-
-      if (e.shiftKey) {
-        // Shift+Tab — 첫 요소에서 → 마지막 요소로
-        if (activeEl === first || !container.contains(activeEl)) {
-          e.preventDefault()
-          last.focus()
-        }
-      } else {
-        // Tab — 마지막 요소에서 → 첫 요소로
-        if (activeEl === last || !container.contains(activeEl)) {
-          e.preventDefault()
-          first.focus()
-        }
+      const current = document.activeElement
+      if (e.shiftKey && (current === first || !container.contains(current))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (current === last || !container.contains(current))) {
+        e.preventDefault()
+        first.focus()
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
-
     return () => {
       cancelAnimationFrame(focusRaf)
       document.removeEventListener('keydown', handleKeyDown)
-
-      // 4. 포커스 복원
-      //    previouslyFocused가 여전히 문서에 존재하는지 확인 후 복원
-      const prev = previouslyFocusedRef.current
-      if (prev instanceof HTMLElement && document.contains(prev)) {
-        prev.focus()
+      if (previouslyFocused instanceof HTMLElement && document.contains(previouslyFocused)) {
+        previouslyFocused.focus()
       }
     }
-  }, [active, onClose, initialFocusRef])
+  }, [active, initialFocusRef])
 
   return containerRef
 }
 
-// ─── 내부 헬퍼 ────────────────────────────────────────────────────────────────
-
-/**
- * 컨테이너 내부의 포커스 가능한 요소들을 DOM 순서대로 반환.
- * disabled, hidden, tabindex="-1"은 제외.
- */
-function getFocusableElements(container: HTMLElement): HTMLElement[] {
+function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
+  if (!container) return []
   const selector = [
     'a[href]',
     'button:not([disabled])',
@@ -116,10 +84,4 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
     (el) => el.offsetParent !== null || el === document.activeElement,
   )
-}
-
-function getFirstFocusable(container: HTMLElement | null): HTMLElement | null {
-  if (!container) return null
-  const all = getFocusableElements(container)
-  return all[0] ?? null
 }

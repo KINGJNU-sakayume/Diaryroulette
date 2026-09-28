@@ -1,284 +1,221 @@
-import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Flame, Image, ImageOff, Smile, X } from 'lucide-react'
-import { getAllJournals, type JournalEntry } from '../db/indexedDB'
-import { missions } from '../data/missions'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Trash2 } from 'lucide-react'
+import { deleteJournal, getJournalsByStatus, type JournalEntry } from '../db/indexedDB'
+import { getMission } from '../data/missions'
+import { CATEGORIES, CATEGORY_ORDER, type MissionCategory } from '../data/categories'
+import { formatDateLong, formatMonth, parseDateId, weekdayLabel } from '../lib/date'
 import CategoryBadge from '../components/shared/CategoryBadge'
-import { useFocusTrap } from '../hooks/useFocusTrap'
+import Loading from '../components/shared/Loading'
+import Modal from '../components/shared/Modal'
+import JournalContent from '../components/Journal/JournalContent'
+import { JournalSnippet, JournalThumb } from '../components/Journal/JournalPreview'
 
-interface ModalState {
-  entry: JournalEntry
-  mission: ReturnType<typeof missions.find>
-}
-
-/**
- * Canvas 컨텐츠를 <img src>에 넣기 전 방어.
- * import 경로로 들어온 악성 dataURL(javascript: 스킴 등)이나 손상된
- * 레코드가 그대로 렌더되지 않도록 이미지/Base64 스킴만 허용한다.
- * importData.ts의 isSafeImageDataUrl과 정책이 일치해야 한다.
- */
-function isSafeImageDataUrl(src: string | null | undefined): src is string {
-  if (typeof src !== 'string') return false
-  return /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(src)
-}
+type Filter = MissionCategory | 'all'
 
 export default function Archive() {
-  const [journals, setJournals] = useState<JournalEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState<ModalState | null>(null)
+  const [journals, setJournals] = useState<JournalEntry[] | null>(null)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState(false)
+  const { date } = useParams<{ date?: string }>()
   const navigate = useNavigate()
-  // /archive/:date 딥링크 파라미터. 예: /archive/2026-04-19
-  const { date: dateParam } = useParams<{ date?: string }>()
+  const location = useLocation()
 
   useEffect(() => {
-    getAllJournals()
+    let alive = true
+    getJournalsByStatus('completed')
       .then((list) => {
-        const completed = list
-          .filter((j) => j.status === 'completed')
-          .sort((a, b) => b.id.localeCompare(a.id))
-        setJournals(completed)
+        if (alive) setJournals(list.sort((a, b) => b.id.localeCompare(a.id)))
       })
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (alive) setJournals([])
+      })
+    return () => {
+      alive = false
+    }
   }, [])
 
-  // URL의 :date가 바뀌면 해당 엔트리의 모달을 자동으로 연다.
-  // (목록 로드 완료 후 실행되어야 하므로 journals 의존성 포함)
-  useEffect(() => {
-    if (!dateParam) {
-      setModal(null)
-      return
-    }
-    if (journals.length === 0) return
-    const entry = journals.find((j) => j.id === dateParam)
-    if (!entry) return
-    const mission = missions.find((m) => m.id === entry.missionId)
-    if (!mission) return
-    setModal({ entry, mission })
-  }, [dateParam, journals])
+  const openEntry = date && journals ? journals.find((j) => j.id === date) : undefined
 
-  // 모달 닫기 — URL도 /archive로 되돌린다.
-  // replace:true로 뒤로가기 히스토리가 쌓이지 않도록.
-  const closeModal = () => {
-    if (dateParam) {
-      navigate('/archive', { replace: true })
-    } else {
-      setModal(null)
+  const close = () => {
+    setConfirmingDelete(false)
+    setDeleteError(false)
+    // 목록에서 열었으면 뒤로 가기로 닫아 히스토리가 쌓이지 않게
+    if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1)
+    else navigate('/archive', { replace: true })
+  }
+
+  const remove = async (id: string) => {
+    try {
+      await deleteJournal(id)
+      setJournals((list) => list?.filter((j) => j.id !== id) ?? null)
+      close()
+    } catch {
+      setDeleteError(true)
     }
   }
 
-  useEffect(() => {
-    if (!modal) return
-    // 이전 overflow 값을 저장해뒀다 복원 — 다른 코드가 body overflow를 건드리고
-    // 있어도 원래 값으로 돌려줌. 라우트 이동 등으로 모달이 unmount되는 경우에도 안전.
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
+  const presentCategories = useMemo(() => {
+    const set = new Set(journals?.map((j) => getMission(j.missionId)?.category).filter(Boolean))
+    return CATEGORY_ORDER.filter((c) => set.has(c))
+  }, [journals])
+
+  const groups = useMemo(() => {
+    const visible = (journals ?? []).filter((j) => filter === 'all' || getMission(j.missionId)?.category === filter)
+    const map = new Map<string, JournalEntry[]>()
+    for (const j of visible) {
+      const key = j.id.slice(0, 7)
+      map.set(key, [...(map.get(key) ?? []), j])
     }
-  }, [modal])
+    return [...map.entries()]
+  }, [journals, filter])
 
-  // 포커스 트랩 — 모달 활성 시 내부에 포커스 가둠, ESC로 닫기, 닫힐 때 포커스 복원
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
-  const modalContainerRef = useFocusTrap<HTMLDivElement>(!!modal, closeModal, closeButtonRef)
+  if (!journals) return <Loading />
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <div className="text-sm animate-pulse" style={{ color: 'var(--color-muted)' }}>로딩 중…</div>
-      </div>
-    )
-  }
+  const openMission = getMission(openEntry?.missionId)
 
   return (
-    <div>
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {journals.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>아직 완료된 일기가 없습니다.</p>
-            <Link to="/" className="text-violet-400 text-sm hover:underline mt-2 inline-block">
-              첫 미션 시작하기
-            </Link>
-          </div>
-        ) : (
-          <>
-            {/* Count shown in page body since header is now global */}
-            <p className="text-xs mb-3" style={{ color: 'var(--color-muted)' }}>
-              {journals.length}개의 완료된 일기
-            </p>
-            <div className="space-y-3">
-              {journals.map((entry) => {
-                const mission = missions.find((m) => m.id === entry.missionId)
-                if (!mission) return null
-                return (
-                  <button
-                    key={entry.id}
-                    onClick={() => navigate(`/archive/${entry.id}`)}
-                    className="w-full text-left rounded-xl border p-4 transition-all hover-surface"
-                    style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <CategoryBadge category={mission.category} size="sm" />
-                          <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{entry.id}</span>
-                        </div>
-                        <h3 className="text-sm font-bold mb-1" style={{ color: 'var(--color-text)' }}>{mission.title}</h3>
-                        <JournalPreview entry={entry} />
-                      </div>
-
-                      {entry.type === 'canvas' && isSafeImageDataUrl(entry.content) && (
-                        <img
-                          src={entry.content}
-                          alt="썸네일"
-                          className="w-16 h-10 object-cover rounded shrink-0 border"
-                          style={{ borderColor: 'var(--color-border)' }}
-                        />
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </>
-        )}
+    <div className="mx-auto max-w-2xl px-4 pt-6">
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h1 className="font-serif text-2xl font-bold text-ink">기록</h1>
+        {journals.length > 0 && <span className="text-sm text-muted">모두 {journals.length}편</span>}
       </div>
 
-      {/* Detail modal */}
-      {modal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.85)' }}
-          onClick={closeModal}
-        >
-          <div
-            ref={modalContainerRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="archive-modal-title"
-            tabIndex={-1}
-            className="w-full max-w-xl rounded-2xl border p-6 max-h-[80vh] overflow-y-auto outline-none"
-            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <CategoryBadge category={modal.mission!.category} />
-                <h2
-                  id="archive-modal-title"
-                  className="text-xl font-bold font-serif mt-2"
-                  style={{ color: 'var(--color-text)' }}
-                >
-                  {modal.mission!.title}
+      {journals.length === 0 ? (
+        <div className="panel px-6 py-14 text-center">
+          <p className="text-[15px] text-ink-mid">아직 다 쓴 일기가 없어요.</p>
+          <p className="mt-1 text-sm text-muted">첫 일기를 마치면 여기에 차곡차곡 쌓여요.</p>
+          <Link to="/" className="btn-primary mt-6">
+            오늘의 미션 보러 가기
+          </Link>
+        </div>
+      ) : (
+        <>
+          {presentCategories.length > 1 && (
+            <div className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1" role="radiogroup" aria-label="카테고리로 거르기">
+              <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
+                전체
+              </FilterChip>
+              {presentCategories.map((c) => (
+                <FilterChip key={c} active={filter === c} onClick={() => setFilter(c)} dot={CATEGORIES[c].color}>
+                  {CATEGORIES[c].label}
+                </FilterChip>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-8">
+            {groups.map(([month, entries]) => (
+              <section key={month}>
+                <h2 className="mb-2 flex items-baseline gap-2 text-sm font-semibold text-ink-mid">
+                  {formatMonth(`${month}-01`)}
+                  <span className="font-normal text-muted">{entries.length}편</span>
                 </h2>
-                <p className="text-xs mt-1" style={{ color: 'var(--color-muted)' }}>{modal.entry.id}</p>
-              </div>
-              <button
-                ref={closeButtonRef}
-                onClick={closeModal}
-                aria-label="닫기"
-                className="shrink-0 p-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                style={{ color: 'var(--color-muted)' }}
-              >
-                <X className="w-5 h-5" aria-hidden="true" />
-              </button>
-            </div>
-
-            <JournalContent entry={modal.entry} />
+                <ul className="panel divide-y divide-line overflow-hidden">
+                  {entries.map((entry) => {
+                    const mission = getMission(entry.missionId)
+                    return (
+                      <li key={entry.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/archive/${entry.id}`, { state: { fromList: true } })}
+                          className="flex w-full items-start gap-4 px-4 py-4 text-left transition-colors hover:bg-card"
+                        >
+                          <span className="w-9 shrink-0 text-center">
+                            <span className="block font-serif text-xl font-bold leading-none text-ink">
+                              {parseDateId(entry.id).getDate()}
+                            </span>
+                            <span className="mt-1 block text-xs text-muted">{weekdayLabel(entry.id)}</span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="mb-1 flex flex-wrap items-center gap-2">
+                              {mission && <CategoryBadge category={mission.category} />}
+                              <span className="truncate text-[15px] font-semibold text-ink">{mission?.title ?? '알 수 없는 미션'}</span>
+                            </span>
+                            <JournalSnippet entry={entry} mission={mission} />
+                          </span>
+                          <JournalThumb entry={entry} />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            ))}
           </div>
-        </div>
+        </>
       )}
+
+      <Modal
+        open={Boolean(openEntry)}
+        onClose={close}
+        eyebrow={
+          openEntry && (
+            <span className="flex flex-wrap items-center gap-2">
+              {openMission && <CategoryBadge category={openMission.category} />}
+              <span className="text-xs text-muted">{formatDateLong(openEntry.id)}</span>
+            </span>
+          )
+        }
+        title={openMission?.title ?? '일기'}
+        footer={
+          openEntry &&
+          (confirmingDelete ? (
+            <>
+              <p className="flex-1 self-center text-sm text-ink-mid">
+                {deleteError ? '지우지 못했어요. 다시 시도해 주세요.' : '이 일기를 지울까요? 되돌릴 수 없어요.'}
+              </p>
+              <button type="button" onClick={() => setConfirmingDelete(false)} className="btn-ghost text-sm">
+                취소
+              </button>
+              <button type="button" onClick={() => remove(openEntry.id)} className="btn-danger text-sm">
+                지우기
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => setConfirmingDelete(true)} className="btn-ghost text-sm text-danger">
+                <Trash2 className="h-4 w-4" />
+                지우기
+              </button>
+              <div className="flex-1" />
+              <button type="button" onClick={close} className="btn-secondary text-sm">
+                닫기
+              </button>
+            </>
+          ))
+        }
+      >
+        {openEntry && <JournalContent entry={openEntry} mission={openMission} />}
+      </Modal>
     </div>
   )
 }
 
-function JournalPreview({ entry }: { entry: JournalEntry }) {
-  if (entry.type === 'trash') {
-    return (
-      <p className="text-sm text-orange-400 flex items-center gap-1.5">
-        <Flame className="w-3.5 h-3.5" />
-        소각 완료
-      </p>
-    )
-  }
-  if (entry.type === 'canvas') {
-    return (
-      <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted)' }}>
-        <Image className="w-3 h-3" />
-        드로잉
-      </p>
-    )
-  }
-  if (!entry.content) {
-    return <p className="text-xs italic" style={{ color: 'var(--color-muted)' }}>내용 없음</p>
-  }
-  // Detect emoji-only
-  const isEmoji = /^[\p{Emoji}\p{Emoji_Presentation}\uFE0F\s]+$/u.test(entry.content)
-  if (isEmoji) {
-    return (
-      <p className="text-xl leading-tight">{entry.content.slice(0, 20)}</p>
-    )
-  }
+function FilterChip({
+  active,
+  onClick,
+  dot,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  dot?: string
+  children: React.ReactNode
+}) {
   return (
-    <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: 'var(--color-text-mid)' }}>
-      {entry.content.slice(0, 120)}
-    </p>
-  )
-}
-
-function JournalContent({ entry }: { entry: JournalEntry }) {
-  if (entry.type === 'trash') {
-    return (
-      <div className="flex flex-col items-center py-8 gap-3">
-        <Flame className="w-12 h-12 text-orange-500" />
-        <p className="text-orange-400 font-bold">🔥 소각 완료</p>
-        <p className="text-xs" style={{ color: 'var(--color-muted)' }}>이 일기의 내용은 파쇄되었습니다.</p>
-      </div>
-    )
-  }
-  if (entry.type === 'canvas' && entry.content) {
-    if (!isSafeImageDataUrl(entry.content)) {
-      return (
-        <div
-          className="flex flex-col items-center gap-2 py-8 rounded-xl border"
-          style={{ background: 'var(--color-card)', borderColor: 'var(--color-border)' }}
-        >
-          <ImageOff className="w-8 h-8" style={{ color: 'var(--color-muted)' }} />
-          <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-            이 드로잉은 손상되어 표시할 수 없습니다.
-          </p>
-        </div>
-      )
-    }
-    return (
-      <img
-        src={entry.content}
-        alt="드로잉"
-        className="w-full rounded-xl border"
-        style={{ borderColor: 'var(--color-border)' }}
-      />
-    )
-  }
-  if (!entry.content) {
-    return <p className="italic text-sm" style={{ color: 'var(--color-muted)' }}>내용 없음</p>
-  }
-
-  // Check if emoji-only
-  const isEmoji = /^[\p{Emoji}\p{Emoji_Presentation}\uFE0F\s]+$/u.test(entry.content)
-  if (isEmoji) {
-    return (
-      <div className="text-3xl leading-loose p-4 rounded-xl" style={{ background: 'var(--color-card)' }}>
-        <Smile className="w-4 h-4 inline mr-2" style={{ color: 'var(--color-muted)' }} />
-        {entry.content}
-      </div>
-    )
-  }
-
-  return (
-    <div
-      className="text-sm leading-relaxed whitespace-pre-wrap p-4 rounded-xl"
-      style={{ background: 'var(--color-card)', color: 'var(--color-text)' }}
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+        active ? 'border-ink bg-ink text-page' : 'border-line bg-surface text-ink-mid hover:bg-card'
+      }`}
     >
-      {entry.content}
-    </div>
+      {dot && <span className="h-2 w-2 rounded-full" style={{ background: dot }} aria-hidden="true" />}
+      {children}
+    </button>
   )
 }

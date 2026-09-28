@@ -6,6 +6,7 @@ import {
   type CooldownEntry,
   type JournalEntry,
 } from '../db/indexedDB'
+import { getLocalDateString } from '../lib/date'
 
 export interface ExportData {
   exportedAt: string
@@ -35,14 +36,15 @@ export async function exportToJSON(): Promise<void> {
   }
 
   const json = JSON.stringify(data, null, 2)
-  const today = new Date().toISOString().split('T')[0]
+  const today = getLocalDateString()
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `roulette-journal-backup-${today}.json`
+  a.download = `일기룰렛-백업-${today}.json`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  // 일부 브라우저(Safari)는 클릭 직후 URL을 해제하면 다운로드가 취소된다
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

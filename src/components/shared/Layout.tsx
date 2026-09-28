@@ -1,126 +1,42 @@
-import { useLocation, Link, NavLink } from 'react-router-dom'
-import { Archive, FileText, BarChart2 } from 'lucide-react'
-import { useTheme } from '../../contexts/ThemeContext'
+import { Link, NavLink } from 'react-router-dom'
 import BottomTabBar from './BottomTabBar'
+import Logo from './Logo'
+import ThemeToggle from './ThemeToggle'
+import { NAV_ITEMS } from './navItems'
 
-// Map of routes to Korean page titles shown on mobile header
-const PAGE_TITLES: Record<string, string> = {
-  '/':        '일기 룰렛',
-  '/archive': '보관함',
-  '/drafts':  '임시저장',
-  '/stats':   '통계',
-}
-
-interface LayoutProps {
-  children: React.ReactNode
-}
-
-export default function Layout({ children }: LayoutProps) {
-  const { theme, toggleTheme } = useTheme()
-  const { pathname } = useLocation()
-  const pageTitle = PAGE_TITLES[pathname] ?? '일기 룰렛'
-
+export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
-
-      {/* ── Global header ─────────────────────────────────────────── */}
-      <header
-        className="safe-top sticky top-0 z-30 border-b"
-        style={{
-          background: 'var(--color-bg-nav)',
-          borderColor: 'var(--color-card)',
-          backdropFilter: 'blur(8px)',
-        }}
-      >
-        <div className="flex items-center px-4 py-3 gap-3">
-
-          {/* Logo — always links to home */}
-          <Link
-            to="/"
-            className="font-bold font-serif shrink-0"
-            style={{ color: 'var(--color-text)', fontSize: '1.1rem' }}
-          >
+    <div className="flex min-h-screen flex-col bg-page">
+      <header className="safe-top sticky top-0 z-30 border-b border-line" style={{ background: 'var(--color-nav)' }}>
+        <div className="mx-auto flex h-14 max-w-2xl items-center gap-3 px-4">
+          <Link to="/" className="flex items-center gap-2 font-serif text-[17px] font-bold text-ink">
+            <Logo size={26} />
             일기 룰렛
           </Link>
-
-          {/* Mobile: current page title (hidden on desktop) */}
-          <div className="flex items-center gap-2 md:hidden ml-1">
-            {pathname !== '/' && (
-              <span
-                className="text-base font-bold font-serif"
-                style={{ color: 'var(--color-text)' }}
-              >
-                {pageTitle}
-              </span>
-            )}
-          </div>
-
-          {/* Spacer */}
           <div className="flex-1" />
-
-          {/* Desktop nav links (hidden on mobile) */}
-          <nav className="hidden md:flex items-center gap-1">
-            <DesktopNavLink to="/archive" icon={<Archive className="w-4 h-4" />} label="보관함" />
-            <DesktopNavLink to="/drafts"  icon={<FileText className="w-4 h-4" />} label="임시저장" />
-            <DesktopNavLink to="/stats"   icon={<BarChart2 className="w-4 h-4" />} label="통계" />
+          <nav aria-label="주요 메뉴" className="hidden items-center gap-1 md:flex">
+            {NAV_ITEMS.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  `rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-card ${
+                    isActive ? 'font-semibold text-accent' : 'text-ink-mid'
+                  }`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
           </nav>
-
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-            aria-pressed={theme === 'dark'}
-            style={{
-              background: 'var(--color-card)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-muted)',
-              borderRadius: '8px',
-              padding: '6px 10px',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-            title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-          >
-            <span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span>
-          </button>
-
+          <ThemeToggle />
         </div>
       </header>
 
-      {/* ── Page content ──────────────────────────────────────────── */}
-      <main className="flex-1 pb-tab-bar md:pb-0">
-        {children}
-      </main>
+      <main className="pb-tab-bar flex-1 md:pb-10">{children}</main>
 
-      {/* ── Bottom tab bar (mobile only) ──────────────────────────── */}
       <BottomTabBar />
-
     </div>
-  )
-}
-
-// ── Desktop nav link helper ────────────────────────────────────────────────────
-
-function DesktopNavLink({
-  to,
-  icon,
-  label,
-}: {
-  to: string
-  icon: React.ReactNode
-  label: string
-}) {
-  return (
-    <NavLink
-      to={to}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors hover-surface"
-      style={({ isActive }) => ({
-        color: isActive ? 'var(--color-accent)' : 'var(--color-text-mid)',
-        fontWeight: isActive ? 600 : 400,
-      })}
-    >
-      {icon}
-      {label}
-    </NavLink>
   )
 }

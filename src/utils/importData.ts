@@ -5,6 +5,7 @@ import type {
   TodayMissionRecord,
 } from '../db/indexedDB'
 import { missions } from '../data/missions'
+import { isDateId } from '../lib/date'
 import type { ExportData } from './exportData'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -27,18 +28,7 @@ function isString(v: unknown): v is string {
   return typeof v === 'string'
 }
 
-/** YYYY-MM-DD 형태이며 실제 존재하는 날짜인지 확인 */
-function isValidDateId(v: unknown): v is string {
-  if (!isString(v)) return false
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
-  const [y, m, d] = v.split('-').map(Number)
-  const date = new Date(y, m - 1, d)
-  return (
-    date.getFullYear() === y &&
-    date.getMonth() === m - 1 &&
-    date.getDate() === d
-  )
-}
+const isValidDateId = isDateId
 
 function isIsoDateTime(v: unknown): v is string {
   if (!isString(v)) return false
@@ -51,7 +41,7 @@ function isIsoDateTime(v: unknown): v is string {
  * `javascript:`, `file:`, 외부 `http(s):` 등은 Archive 페이지에서 렌더될 때
  * XSS 또는 프라이버시 누수 벡터가 될 수 있으므로 모두 거절한다.
  */
-function isSafeImageDataUrl(v: unknown): v is string {
+export function isSafeImageDataUrl(v: unknown): v is string {
   if (!isString(v)) return false
   return /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(v)
 }
@@ -183,7 +173,7 @@ export function validateExportData(raw: unknown): ValidationResult {
     )
   }
   if (droppedCooldowns.length > 0) {
-    warnings.push(`쿨다운 기록 ${droppedCooldowns.length}건이 손상되어 제외됩니다`)
+    warnings.push(`미션 휴식 기록 ${droppedCooldowns.length}건이 손상되어 제외됩니다`)
   }
   if (missionsObj.todayMission != null && validTodayMission === null) {
     warnings.push('오늘의 미션 기록이 손상되어 제외됩니다')
