@@ -2,113 +2,201 @@
 @tailwind components;
 @tailwind utilities;
 
-[data-theme="light"] {
-  --color-bg:          #FFFDF8;
-  --color-surface:     #F5EEE3;
-  --color-card:        #EDE4D5;
-  --color-border:      #D6CAB8;
-  --color-text:        #1C1510;
-  --color-text-mid:    #5A4E3F;
-  --color-muted:       #8A7A68;
-  --color-accent:      #D97706;
-  --color-accent-dark: #B45309;
-  --color-accent-bg:   #FEF3C7;
-  --scrollbar-track:   #F0E9DC;
-  --scrollbar-thumb:   #C8BAA8;
-  --color-bg-nav:      rgba(255, 253, 248, 0.93);
+/* ── 색 토큰 ─────────────────────────────────────────────────────────────────
+   라이트: 크림색 종이 + 먹색 글자 + 벽돌색 포인트
+   다크:   따뜻한 밤색 바탕 (차가운 청회색 대신)                                */
+
+:root,
+[data-theme='light'] {
+  --color-bg: #f6f2ea;
+  --color-surface: #fffdf9;
+  --color-card: #efe9df;
+  --color-border: #e2dacd;
+  --color-text: #2b2622;
+  --color-text-mid: #564d45;
+  --color-muted: #877c71;
+  --color-accent: #b5533c;
+  --color-accent-strong: #97402c;
+  --color-accent-soft: #f4e3db;
+  --color-on-accent: #ffffff;
+  --color-danger: #b83a2e;
+  --color-danger-soft: #f7e1dd;
+  --color-success: #4e7d4a;
+  --color-nav: rgba(246, 242, 234, 0.95);
+  --color-mark: rgba(214, 72, 52, 0.16);
+  --color-mark-line: #d04a36;
+  color-scheme: light;
 }
 
-[data-theme="dark"] {
-  --color-bg:          #0d1117;
-  --color-surface:     #161b22;
-  --color-card:        #21262d;
-  --color-border:      #30363d;
-  --color-text:        #e6edf3;
-  --color-text-mid:    #c9d1d9;
-  --color-muted:       #8b949e;
-  --color-accent:      #7c3aed;
-  --color-accent-dark: #5b21b6;
-  --color-accent-bg:   #2d2057;
-  --scrollbar-track:   #161b22;
-  --scrollbar-thumb:   #30363d;
-  --color-bg-nav:      rgba(13, 17, 23, 0.93);
+[data-theme='dark'] {
+  --color-bg: #1b1916;
+  --color-surface: #24211d;
+  --color-card: #2e2a26;
+  --color-border: #3c3732;
+  --color-text: #ece5da;
+  --color-text-mid: #cbc2b6;
+  --color-muted: #978c80;
+  --color-accent: #de8466;
+  --color-accent-strong: #ec9a7e;
+  --color-accent-soft: #3b2922;
+  --color-on-accent: #1b1916;
+  --color-danger: #eb7b6f;
+  --color-danger-soft: #3d2320;
+  --color-success: #8fbf85;
+  --color-nav: rgba(27, 25, 22, 0.95);
+  --color-mark: rgba(235, 123, 111, 0.2);
+  --color-mark-line: #eb7b6f;
+  color-scheme: dark;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-  min-height: 100%;
-  /* Prevent iOS rubber-band scroll outside the app boundary */
-  overscroll-behavior: none;
+/* 캔버스 종이는 테마와 무관하게 항상 밝다 (다크 모드에서 그린 그림도 라이트에서 보이도록) */
+:root {
+  --paper: #fbf8f2;
 }
 
-body {
-  margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: 'Noto Serif KR', serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* Reserve space for the bottom home indicator on iPhone */
-  padding-bottom: env(safe-area-inset-bottom);
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  html {
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    @apply font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  /* iOS는 16px 미만 입력창에 포커스하면 화면을 확대한다 */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  button {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+  }
 }
 
-/* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
-input,
-textarea,
-select {
-  font-size: 16px !important;
+@layer components {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* 모바일 하단 탭바에 내용이 가리지 않도록 */
+  .pb-tab-bar {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[15px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-accent-on hover:bg-accent-strong;
+  }
+  .btn-secondary {
+    @apply btn border border-line bg-surface text-ink hover:bg-card;
+  }
+  .btn-ghost {
+    @apply btn text-ink-mid hover:bg-card;
+  }
+  .btn-danger {
+    @apply btn bg-danger text-white hover:opacity-90;
+  }
+  .icon-btn {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-mid transition-colors hover:bg-card;
+  }
+
+  .panel {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+
+  /* 글쓰기 영역. textarea와 규칙 표시 레이어가 정확히 같은 줄바꿈을 하도록
+     글꼴·여백·줄 간격·줄바꿈 규칙을 한곳에서 정의한다. */
+  .writing-surface {
+    font-family: 'Noto Serif KR', 'Apple Myungjo', serif;
+    font-size: 17px;
+    line-height: 1.85;
+    letter-spacing: -0.005em;
+    padding: 1.1rem 1.15rem;
+    white-space: pre-wrap;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    tab-size: 4;
+  }
 }
 
-/* Applied to all sticky headers so content clears the Dynamic Island */
-.safe-top {
-  padding-top: env(safe-area-inset-top);
+mark.rule-miss {
+  color: inherit;
+  background: var(--color-mark);
+  border-radius: 2px;
+  box-shadow: inset 0 -2px 0 var(--color-mark-line);
 }
 
-mark { color: inherit; }
-
-* {
-  box-sizing: border-box;
+/* 감정 온도 슬라이더: 색 띠 위에 흰 손잡이 */
+.temperature-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.temperature-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-text);
 }
 
-/* Hover utility — replaces hover:bg-white/5 */
-.hover-surface:hover {
-  background-color: var(--color-card);
+/* 파쇄 애니메이션 */
+@keyframes shred-fall {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), 220px) rotate(var(--rot));
+    opacity: 0;
+  }
 }
 
-/* Prevents content from being hidden behind the fixed bottom tab bar on mobile */
-.pb-tab-bar {
-  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
-}
-
-/* Custom scrollbar */
+/* 스크롤바 */
 ::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
   background: var(--color-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* iOS Safari의 기본 파란 탭 하이라이트 제거 — 버튼을 탭했을 때 순간적으로
-   나타나는 반투명 박스가 디자인을 해치고 앱-like feel을 저해함.
-   접근성에는 영향 없음(:focus-visible은 별도로 동작). */
-* {
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* prefers-reduced-motion: reduce
-   사용자가 iOS "설정 → 손쉬운 사용 → 동작 → 동작 줄이기"를 켰거나
-   다른 OS에서 유사 설정을 켠 경우, 긴 서사적 애니메이션은 즉시 완료되도록 한다.
-   정보성 마이크로 전환(0.2s 이하)은 사용성에 도움이 되므로 완전 제거가 아닌
-   강하게 단축하는 전략. JS 기반 rAF 애니메이션은 컴포넌트에서 별도 대응. */
+/* "동작 줄이기" 설정 사용자에게는 긴 애니메이션을 사실상 끈다 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

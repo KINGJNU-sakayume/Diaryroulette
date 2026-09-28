@@ -1,429 +1,504 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Save, CheckCircle } from 'lucide-react'
-import { missions, type Mission } from '../data/missions'
-import { getJournal, saveJournal, getTodayMission, type JournalEntry } from '../db/indexedDB'
-import { getEffectiveDateString } from '../hooks/useTodayMission'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Check, CircleAlert, Scissors } from 'lucide-react'
+import { getMission, journalTypeOf, type Mission } from '../data/missions'
+import {
+  deleteJournal,
+  getAllJournals,
+  getJournal,
+  getTodayMission,
+  saveJournal,
+  type JournalEntry,
+} from '../db/indexedDB'
+import { formatDateLong, formatTime, getEffectiveDateString, isDateId } from '../lib/date'
+import { joinAnswers, restoreValues, toAnswers } from '../lib/prompts'
+import { computeStreaks } from '../lib/streak'
+import { countChars, countEmoji } from '../lib/text'
 import CategoryBadge from '../components/shared/CategoryBadge'
+import ThemeToggle from '../components/shared/ThemeToggle'
+import Loading from '../components/shared/Loading'
+import MissionExtras from '../components/Mission/MissionExtras'
+import JournalContent from '../components/Journal/JournalContent'
 import TextEditor from '../components/Editor/TextEditor'
 import TimedTextEditor from '../components/Editor/TimedTextEditor'
-import CanvasEditor from '../components/Editor/CanvasEditor'
+import CanvasEditor, { type CanvasApi } from '../components/Editor/CanvasEditor'
 import EmojiEditor from '../components/Editor/EmojiEditor'
 import TrashEditor from '../components/Editor/TrashEditor'
-import { useTheme } from '../contexts/ThemeContext'
+import PromptsEditor from '../components/Editor/PromptsEditor'
 
-// Auto-save interval in ms
-const AUTO_SAVE_MS = 5000
+const AUTOSAVE_MS = 4000
+
+type LoadState = 'loading' | 'ready' | 'missing' | 'error'
 
 export default function Write() {
-  const [searchParams] = useSearchParams()
+  const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { theme, toggleTheme } = useTheme()
-
-  const dateParam = searchParams.get('date')
-  const missionIdParam = searchParams.get('missionId')
-  const backTo = dateParam ? '/drafts' : '/'
   const today = getEffectiveDateString()
+
+  // ?date=는 임시저장에서 이어 쓸 때만 붙는다. 미래 날짜나 잘못된 값은 무시.
+  const rawDate = params.get('date')
+  const dateParam = isDateId(rawDate) && rawDate <= today ? rawDate : null
+  const missionParam = params.get('missionId')
   const targetDate = dateParam ?? today
+  const backTo = dateParam ? '/drafts' : '/'
 
+  const [loadState, setLoadState] = useState<LoadState>('loading')
   const [mission, setMission] = useState<Mission | null>(null)
-  const [journal, setJournal] = useState<JournalEntry | null>(null)
-  const [content, setContent] = useState('')
   const [extraData, setExtraData] = useState<Record<string, unknown> | undefined>()
-  const [loading, setLoading] = useState(true)
+  const [text, setText] = useState('')
+  const [answers, setAnswers] = useState<string[]>([])
+  const [initialCanvas, setInitialCanvas] = useState<string | null>(null)
+  const [canvasEmpty, setCanvasEmpty] = useState(true)
+  const [restored, setRestored] = useState<{ elapsed: number; hue?: number }>({ elapsed: 0 })
+  const [briefOpen, setBriefOpen] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [completed, setCompleted] = useState(false)
-  const [timedCanComplete, setTimedCanComplete] = useState(false)
-  const [lastAutoSaved, setLastAutoSaved] = useState<Date | null>(null)
-  const completedRef = useRef(false)
-  useEffect(() => { completedRef.current = completed }, [completed])
-  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const contentRef = useRef(content)
-  useEffect(() => {
-    contentRef.current = content
-  }, [content])
-  // createdAt은 첫 저장 시점에 한 번만 결정되면 됨 — ref로 고정해서
-  // autoSaveDraft의 의존성 체인을 끊는다 (stale closure 방지)
+  const [error, setError] = useState<string | null>(null)
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
+  const [done, setDone] = useState<{ entry: JournalEntry; streak: number } | null>(null)
+
+  // 자동저장은 항상 "지금" 값을 봐야 해서 ref로도 들고 있는다
+  const missionRef = useRef<Mission | null>(null)
+  const extraRef = useRef<Record<string, unknown> | undefined>(undefined)
+  const textRef = useRef('')
+  const answersRef = useRef<string[]>([])
+  const timerElapsedRef = useRef(0)
+  const monoHueRef = useRef<number | undefined>(undefined)
+  const canvasApi = useRef<CanvasApi | null>(null)
   const createdAtRef = useRef<string | null>(null)
+  const draftExistsRef = useRef(false)
+  const dirtyRef = useRef(false)
+  const completedRef = useRef(false)
 
-  // Load mission + existing draft
+  // ── 불러오기 ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    async function load() {
-      let resolvedMissionId = missionIdParam
-      let resolvedExtraData: Record<string, unknown> | undefined
+    let alive = true
+    ;(async () => {
+      const [existing, record] = await Promise.all([getJournal(targetDate), getTodayMission()])
+      if (!alive) return
+      if (existing?.status === 'completed') {
+        navigate(`/archive/${existing.id}`, { replace: true })
+        return
+      }
+      const recordForDate = record?.date === targetDate ? record : undefined
+      const m = getMission(existing?.missionId) ?? getMission(missionParam) ?? getMission(recordForDate?.missionId)
+      if (!m) {
+        setLoadState('missing')
+        return
+      }
 
-      if (!resolvedMissionId) {
-        const todayMission = await getTodayMission()
-        if (todayMission?.date === today) {
-          resolvedMissionId = todayMission.missionId
-          resolvedExtraData = todayMission.extraData
-        }
+      // 추첨값(금지 모음 등)은 오늘의 미션 기록에서, 이어 쓰는 경우엔 임시저장본에서
+      const extra = {
+        ...(recordForDate?.missionId === m.id ? recordForDate.extraData : undefined),
+        ...existing?.extraData,
+      }
+      missionRef.current = m
+      extraRef.current = Object.keys(extra).length ? extra : undefined
+      createdAtRef.current = existing?.createdAt ?? null
+      draftExistsRef.current = Boolean(existing)
+      timerElapsedRef.current = typeof extra.timerElapsed === 'number' ? extra.timerElapsed : 0
+      monoHueRef.current = typeof extra.monoHue === 'number' ? extra.monoHue : undefined
+      setRestored({ elapsed: timerElapsedRef.current, hue: monoHueRef.current })
+
+      if (m.editorType === 'canvas') {
+        setInitialCanvas(existing?.content ?? null)
+        setCanvasEmpty(!existing?.content)
+      } else if (m.editorType === 'prompts') {
+        const values = restoreValues(m.prompts ?? [], extra.answers, existing?.content)
+        answersRef.current = values
+        setAnswers(values)
       } else {
-        // Load extraData from today's mission if IDs match
-        const todayMission = await getTodayMission()
-        if (todayMission?.missionId === resolvedMissionId) {
-          resolvedExtraData = todayMission.extraData
-        }
+        textRef.current = existing?.content ?? ''
+        setText(textRef.current)
       }
-
-      if (!resolvedMissionId) {
-        setLoading(false)
-        return
-      }
-
-      const foundMission = missions.find((m) => m.id === resolvedMissionId)
-      if (!foundMission) {
-        setLoading(false)
-        return
-      }
-      setMission(foundMission)
-
-      // Load existing journal
-      const existingJournal = await getJournal(targetDate)
-      if (existingJournal) {
-        if (existingJournal.status === 'completed') {
-          // 완료된 일기는 해당 엔트리의 딥링크로 이동해 Archive 모달이 자동 오픈되게 함
-          navigate(`/archive/${existingJournal.id}`, { replace: true })
-          return
-        }
-        setJournal(existingJournal)
-        createdAtRef.current = existingJournal.createdAt
-        setContent(existingJournal.content ?? '')
-        // BUG-6: fall back to journal's own extraData when today-mission lookup yielded nothing
-        if (!resolvedExtraData && existingJournal.extraData) {
-          resolvedExtraData = existingJournal.extraData
-        }
-      } else if (foundMission.template) {
-        // FEAT-1: pre-fill with template only when no draft exists
-        setContent(foundMission.template)
-      }
-
-      if (resolvedExtraData) {
-        setExtraData(resolvedExtraData)
-      }
-
-      setLoading(false)
-    }
-
-    load()
-  }, [targetDate, missionIdParam, today, navigate])
-
-  // For countdown timed missions, block completion until first keystroke
-  useEffect(() => {
-    if (mission?.editorType === 'timed-text') {
-      setTimedCanComplete(!mission.timerSeconds)
-    }
-  }, [mission])
-
-  const autoSaveDraft = useCallback(async () => {
-    if (!mission) return
-    // CRITICAL: Trash 미션은 절대 IDB에 저장하지 않음 — 사용자와의 약속 (이중 방어)
-    if (mission.editorType === 'trash') return
-
-    const entry: JournalEntry = {
-      id: targetDate,
-      missionId: mission.id,
-      type: mission.editorType === 'canvas' ? 'canvas' : 'text',
-      content: contentRef.current || null,
-      status: 'draft',
-      createdAt: createdAtRef.current ?? new Date().toISOString(),
-      completedAt: null,
-      extraData: extraData ?? undefined,
-    }
-    createdAtRef.current = entry.createdAt  // 최초 저장 후 고정
-    await saveJournal(entry)
-    setJournal(entry)
-  }, [mission, targetDate, extraData])
-
-  const autoSaveDraftRef = useRef(autoSaveDraft)
-  useEffect(() => {
-    autoSaveDraftRef.current = autoSaveDraft
-  }, [autoSaveDraft])
-
-  // Auto-save draft
-  useEffect(() => {
-    if (!mission || loading) return
-    // CRITICAL: Trash 미션은 자동저장 인터벌 자체를 시작하지 않는다
-    if (mission.editorType === 'trash') return
-
-    autoSaveRef.current = setInterval(async () => {
-      if (contentRef.current && !completedRef.current) {
-        await autoSaveDraftRef.current()
-        setLastAutoSaved(new Date())
-      }
-    }, AUTO_SAVE_MS)
-
-    // 페이지를 떠날 때 마지막 저장 시도.
-    // - pagehide는 beforeunload보다 iOS Safari에서 더 안정적으로 발화
-    // - visibilitychange는 탭 전환/백그라운드 전환에서 발화 (pagehide보다 먼저 올 때가 많음)
-    // Trash 가드는 상단 early return으로 이미 보장됨
-    const flush = () => {
-      if (contentRef.current && !completedRef.current) {
-        autoSaveDraftRef.current()
-      }
-    }
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') flush()
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('pagehide', flush)
-
+      setMission(m)
+      setExtraData(extraRef.current)
+      setBriefOpen(!existing)
+      setLoadState('ready')
+    })().catch(() => {
+      if (alive) setLoadState('error')
+    })
     return () => {
-      if (autoSaveRef.current) clearInterval(autoSaveRef.current)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('pagehide', flush)
+      alive = false
     }
-  }, [mission, loading])
+  }, [targetDate, missionParam, navigate])
 
-  const handleSave = useCallback(async () => {
-    if (!mission) return
-    setSaving(true)
-    const entry: JournalEntry = {
-      id: targetDate,
-      missionId: mission.id,
-      type: mission.editorType === 'canvas' ? 'canvas' : mission.editorType === 'trash' ? 'trash' : 'text',
-      content: content || null,
-      status: 'completed',
-      createdAt: createdAtRef.current ?? new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      extraData: extraData ?? undefined,
+  // ── 저장 ────────────────────────────────────────────────────────────────────
+  /** 지금 화면의 내용을 저장 가능한 형태로 모은다 */
+  const collect = useCallback((): { content: string | null; extraData?: Record<string, unknown>; empty: boolean } => {
+    const m = missionRef.current!
+    const extra: Record<string, unknown> = { ...extraRef.current }
+    delete extra.answers
+    delete extra.timerElapsed
+    delete extra.monoHue
+
+    let content: string | null
+    let empty: boolean
+    if (m.editorType === 'canvas') {
+      content = canvasApi.current?.getDataUrl() ?? null
+      empty = !content
+      if (monoHueRef.current !== undefined) extra.monoHue = monoHueRef.current
+    } else if (m.editorType === 'prompts') {
+      const list = toAnswers(m.prompts ?? [], answersRef.current)
+      extra.answers = list
+      content = joinAnswers(list) || null
+      empty = !content
+    } else {
+      content = textRef.current || null
+      empty = !textRef.current.trim()
+      if (m.timerSeconds) extra.timerElapsed = timerElapsedRef.current
     }
-    await saveJournal(entry)
-    setSaving(false)
-    setSaved(true)
-    setCompleted(true)
-    setTimeout(() => setSaved(false), 2000)
-  }, [mission, targetDate, content, extraData])
+    return { content, extraData: Object.keys(extra).length ? extra : undefined, empty }
+  }, [])
 
-  const handleCanvasSave = useCallback(
-    (dataUrl: string) => {
-      setContent(dataUrl)
+  const persistDraft = useCallback(async () => {
+    const m = missionRef.current
+    if (!m || m.editorType === 'trash' || completedRef.current || !dirtyRef.current) return
+    dirtyRef.current = false
+    const { content, extraData, empty } = collect()
+    try {
+      if (empty) {
+        // 다 지웠다면 빈 임시저장을 남기지 않는다
+        if (draftExistsRef.current) {
+          await deleteJournal(targetDate)
+          draftExistsRef.current = false
+        }
+        return
+      }
+      const now = new Date().toISOString()
+      createdAtRef.current ??= now
+      await saveJournal({
+        id: targetDate,
+        missionId: m.id,
+        type: journalTypeOf(m),
+        content,
+        status: 'draft',
+        createdAt: createdAtRef.current,
+        completedAt: null,
+        extraData,
+      })
+      draftExistsRef.current = true
+      setLastSavedAt(now)
+      setError(null)
+    } catch {
+      dirtyRef.current = true
+      setError('자동 저장에 실패했어요. 잠시 뒤 다시 시도할게요.')
+    }
+  }, [collect, targetDate])
+
+  useEffect(() => {
+    if (loadState !== 'ready') return
+    const id = setInterval(persistDraft, AUTOSAVE_MS)
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') void persistDraft()
+    }
+    const onPageHide = () => void persistDraft()
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onPageHide)
+      // 뒤로 가기 등으로 화면을 떠날 때 마지막 내용까지 저장
+      void persistDraft()
+    }
+  }, [loadState, persistDraft])
+
+  // ── 입력 핸들러 ─────────────────────────────────────────────────────────────
+  const changeText = useCallback((v: string) => {
+    textRef.current = v
+    dirtyRef.current = true
+    setText(v)
+  }, [])
+
+  const changeAnswers = useCallback((v: string[]) => {
+    answersRef.current = v
+    dirtyRef.current = true
+    setAnswers(v)
+  }, [])
+
+  const changeCanvas = useCallback((state: { empty: boolean; hue?: number }) => {
+    dirtyRef.current = true
+    if (state.hue !== undefined) monoHueRef.current = state.hue
+    setCanvasEmpty(state.empty)
+  }, [])
+
+  const changeElapsed = useCallback((seconds: number) => {
+    timerElapsedRef.current = seconds
+    dirtyRef.current = true
+  }, [])
+
+  // ── 완료 ────────────────────────────────────────────────────────────────────
+  const finish = useCallback(
+    async (entry: JournalEntry) => {
+      // 저장하는 사이 자동저장이 끼어들어 임시저장으로 덮어쓰지 않도록 먼저 막는다
+      completedRef.current = true
+      try {
+        await saveJournal(entry)
+      } catch (e) {
+        completedRef.current = false
+        throw e
+      }
+      const all = await getAllJournals().catch(() => [])
+      const streak = computeStreaks(
+        all.filter((j) => j.status === 'completed').map((j) => j.id),
+        today,
+      ).current
+      setDone({ entry, streak })
+      window.scrollTo(0, 0)
     },
-    [],
+    [today],
   )
 
-  const handleTrashShred = useCallback(async () => {
-    if (!mission) return
-    // 파쇄 완료 기록은 남기되 실제 내용은 저장하지 않는다.
-    // missionId/createdAt/completedAt 메타데이터만 보관함·통계에 반영됨.
-    // (자동저장은 위 useEffect의 early return으로 차단되어 있으므로
-    //  이 시점까지 IDB에는 이 entry가 존재하지 않는다.)
-    const entry: JournalEntry = {
-      id: targetDate,
-      missionId: mission.id,
-      type: 'trash',
-      content: null,
-      status: 'completed',
-      createdAt: createdAtRef.current ?? new Date().toISOString(),
-      completedAt: new Date().toISOString(),
+  const blocker = mission ? completionBlocker(mission, { text, answers, canvasEmpty }) : null
+
+  const complete = async () => {
+    const m = missionRef.current
+    if (!m || blocker || saving) return
+    setSaving(true)
+    setError(null)
+    const { content, extraData } = collect()
+    const now = new Date().toISOString()
+    try {
+      await finish({
+        id: targetDate,
+        missionId: m.id,
+        type: journalTypeOf(m),
+        content,
+        status: 'completed',
+        createdAt: createdAtRef.current ?? now,
+        completedAt: now,
+        extraData,
+      })
+    } catch {
+      setError('저장하지 못했어요. 한 번 더 눌러 주세요.')
+    } finally {
+      setSaving(false)
     }
-    await saveJournal(entry)
-    setCompleted(true)
-  }, [mission, targetDate])
+  }
 
-  if (loading) {
+  const shred = async () => {
+    const m = missionRef.current
+    if (!m) return
+    const now = new Date().toISOString()
+    // 파쇄 미션은 내용 없이 "썼다"는 기록만 남긴다
+    try {
+      await finish({
+        id: targetDate,
+        missionId: m.id,
+        type: 'trash',
+        content: null,
+        status: 'completed',
+        createdAt: now,
+        completedAt: now,
+      })
+    } catch {
+      setError('기록을 남기지 못했어요.')
+    }
+  }
+
+  // ── 화면 ────────────────────────────────────────────────────────────────────
+  if (loadState === 'loading') return <Loading />
+
+  if (loadState === 'missing' || loadState === 'error' || !mission) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <div className="text-sm animate-pulse" style={{ color: 'var(--color-muted)' }}>로딩 중…</div>
-      </div>
+      <CenteredMessage
+        title={loadState === 'error' ? '일기를 불러오지 못했어요' : '아직 오늘의 미션이 없어요'}
+        body={loadState === 'error' ? '잠시 뒤 다시 열어 주세요.' : '룰렛을 돌려 미션을 먼저 뽑아 주세요.'}
+        action={{ label: '처음으로', to: '/' }}
+      />
     )
   }
 
-  if (!mission) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <div className="text-center">
-          <p className="mb-4" style={{ color: 'var(--color-text-mid)' }}>미션을 찾을 수 없습니다.</p>
-          <Link to="/" className="text-violet-400 hover:underline text-sm">
-            홈으로 돌아가기
-          </Link>
-        </div>
-      </div>
-    )
-  }
+  if (done) return <Finished mission={mission} entry={done.entry} streak={done.streak} isToday={targetDate === today} />
 
-  const isCanvas = mission.editorType === 'canvas'
-  const isTimed = mission.editorType === 'timed-text'
-  const isEmoji = mission.editorType === 'emoji-only'
   const isTrash = mission.editorType === 'trash'
-  const isEmotionTemp = mission.id === 'visual-5'
-
-  const isCharLimitViolated = Boolean(
-    (mission.charLimit?.min !== undefined && content.length < mission.charLimit.min) ||
-    (mission.charLimit?.max !== undefined && content.length > mission.charLimit.max)
-  )
+  const saveStatus = isTrash
+    ? '저장되지 않는 글'
+    : lastSavedAt
+      ? `${formatTime(lastSavedAt)} 자동 저장됨`
+      : '자동 저장 켜짐'
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-      {/* Header */}
-      <div
-        className="safe-top sticky top-0 z-50 border-b px-4 py-3 flex items-center justify-between gap-4"
-        style={{ background: 'var(--color-bg-nav)', borderColor: 'var(--color-card)', backdropFilter: 'blur(8px)' }}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <Link
-            to={backTo}
-            className="p-1.5 rounded-lg hover-surface transition-colors shrink-0"
-            style={{ color: 'var(--color-text-mid)' }}
-          >
-            <ArrowLeft className="w-5 h-5" />
+    <div className="min-h-screen bg-page pb-16">
+      <header className="safe-top sticky top-0 z-30 border-b border-line" style={{ background: 'var(--color-nav)' }}>
+        <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-2 sm:px-4">
+          <Link to={backTo} className="icon-btn shrink-0" aria-label="뒤로">
+            <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <CategoryBadge category={mission.category} size="sm" />
-              <h1 className="text-sm font-bold truncate" style={{ color: 'var(--color-text)' }}>{mission.title}</h1>
-            </div>
-            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{targetDate}</p>
-            {lastAutoSaved && (
-              <p style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
-                자동저장됨 {lastAutoSaved.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-serif text-[15px] font-bold leading-tight text-ink">{mission.title}</p>
+            <p className="truncate text-xs text-muted">
+              {formatDateLong(targetDate)} · {saveStatus}
+            </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={toggleTheme}
-            style={{
-              background: 'var(--color-card)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-muted)',
-              borderRadius: '8px',
-              padding: '6px 10px',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-            title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-
-          {!isTrash && !isCanvas && !completed && (
-            <button
-              onClick={handleSave}
-              disabled={saving || !content.trim() || isCharLimitViolated || (isTimed && !timedCanComplete)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40"
-              style={{ background: 'var(--color-accent)', color: '#fff' }}
-            >
-              {saved ? (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  저장됨
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  {saving ? '저장 중…' : '완료'}
-                </>
-              )}
-            </button>
-          )}
-
-          {(isCanvas || isEmotionTemp) && !completed && (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-40"
-              style={{ background: '#db2777', color: '#fff' }}
-            >
-              <Save className="w-4 h-4" />
+          <ThemeToggle />
+          {!isTrash && (
+            <button type="button" onClick={complete} disabled={Boolean(blocker) || saving} className="btn-primary px-4 py-2 text-sm">
               {saving ? '저장 중…' : '완료'}
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Completed state */}
-      {completed && !isTrash && (
-        <div className="max-w-xl mx-auto px-4 py-16 text-center">
-          <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>오늘의 일기 완료!</h2>
-          <p className="mb-8" style={{ color: 'var(--color-text-mid)' }}>수고했어요. 내일 또 새로운 미션이 기다립니다.</p>
-          <div className="flex gap-3 justify-center">
-            <Link
-              to="/archive"
-              className="px-6 py-2.5 rounded-xl text-sm font-bold border transition-colors"
-              style={{ color: 'var(--color-text)', borderColor: 'var(--color-border)' }}
-            >
-              보관함 보기
-            </Link>
-            <Link
-              to="/"
-              className="px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
-              style={{ background: 'var(--color-accent)', color: '#fff' }}
-            >
-              홈으로
-            </Link>
+      <main className="mx-auto max-w-3xl px-4 pt-4">
+        <details
+          open={briefOpen}
+          onToggle={(e) => setBriefOpen(e.currentTarget.open)}
+          className="panel mb-4 [&_summary::-webkit-details-marker]:hidden"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3">
+            <span className="flex items-center gap-2">
+              <CategoryBadge category={mission.category} />
+              <span className="text-sm font-semibold text-ink">미션 안내</span>
+            </span>
+            <span className="text-xs text-muted">{briefOpen ? '접기' : '펼치기'}</span>
+          </summary>
+          <div className="space-y-3 border-t border-line px-4 pb-4 pt-3">
+            <p className="text-[15px] leading-relaxed text-ink-mid">{mission.description}</p>
+            {mission.rules && (
+              <ul className="space-y-1">
+                {mission.rules.map((r) => (
+                  <li key={r} className="flex gap-2 text-sm text-ink-mid">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+                    {r}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <MissionExtras extraData={extraData} />
           </div>
+        </details>
+
+        {mission.editorType === 'trash' && <TrashEditor mission={mission} value={text} onChange={changeText} onShred={shred} />}
+        {mission.editorType === 'emoji-only' && <EmojiEditor value={text} onChange={changeText} />}
+        {mission.editorType === 'prompts' && <PromptsEditor fields={mission.prompts ?? []} values={answers} onChange={changeAnswers} />}
+        {mission.editorType === 'canvas' && (
+          <CanvasEditor
+            mode={mission.canvasMode ?? 'free'}
+            guide={mission.canvasGuide}
+            initialDataUrl={initialCanvas}
+            initialHue={restored.hue}
+            apiRef={canvasApi}
+            onChange={changeCanvas}
+          />
+        )}
+        {mission.editorType === 'timed-text' && mission.timerSeconds && (
+          <TimedTextEditor
+            mission={{ ...mission, timerSeconds: mission.timerSeconds }}
+            value={text}
+            onChange={changeText}
+            extraData={extraData}
+            initialElapsed={restored.elapsed}
+            onElapsedChange={changeElapsed}
+          />
+        )}
+        {mission.editorType === 'text' && <TextEditor mission={mission} value={text} onChange={changeText} extraData={extraData} />}
+
+        {error && (
+          <p role="alert" className="mt-4 flex items-center gap-2 rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
+            <CircleAlert className="h-4 w-4 shrink-0" />
+            {error}
+          </p>
+        )}
+
+        {!isTrash && (
+          <div className="mt-6 flex flex-col items-center gap-2">
+            {blocker && <p className="text-sm text-muted">{blocker}</p>}
+            <button type="button" onClick={complete} disabled={Boolean(blocker) || saving} className="btn-primary w-full max-w-sm py-3 text-base">
+              <Check className="h-5 w-5" />
+              {saving ? '저장 중…' : '다 썼어요'}
+            </button>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+/** 완료 버튼을 누를 수 없는 이유. 누를 수 있으면 null. */
+function completionBlocker(
+  mission: Mission,
+  state: { text: string; answers: string[]; canvasEmpty: boolean },
+): string | null {
+  switch (mission.editorType) {
+    case 'trash':
+      return null
+    case 'canvas':
+      return state.canvasEmpty ? '그림을 그려야 완료할 수 있어요' : null
+    case 'prompts': {
+      const left = state.answers.filter((a) => !a.trim()).length
+      return left > 0 ? `빈 칸이 ${left}개 남았어요` : null
+    }
+    case 'emoji-only':
+      return countEmoji(state.text) === 0 ? '이모지를 하나 이상 넣어 주세요' : null
+    default: {
+      if (!state.text.trim()) return '아직 쓴 내용이 없어요'
+      const n = countChars(state.text)
+      const { min, max } = mission.charLimit ?? {}
+      if (min !== undefined && min === max && n !== min) return `정확히 ${min}자여야 해요 (지금 ${n}자)`
+      if (min !== undefined && n < min) return `${(min - n).toLocaleString()}자 더 써야 완료할 수 있어요`
+      if (max !== undefined && n > max) return `${n - max}자를 줄여야 완료할 수 있어요`
+      return null
+    }
+  }
+}
+
+function Finished({ mission, entry, streak, isToday }: { mission: Mission; entry: JournalEntry; streak: number; isToday: boolean }) {
+  const isTrash = entry.type === 'trash'
+  return (
+    <div className="min-h-screen bg-page">
+      <main className="safe-top mx-auto max-w-xl px-4 pb-16 pt-12 animate-fadeIn">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent">
+            {isTrash ? <Scissors className="h-7 w-7" /> : <Check className="h-7 w-7" strokeWidth={2.5} />}
+          </div>
+          <h1 className="font-serif text-2xl font-bold text-ink">
+            {isTrash ? '깨끗하게 파쇄했어요' : isToday ? '오늘의 일기를 마쳤어요' : `${formatDateLong(entry.id)} 일기를 마쳤어요`}
+          </h1>
+          <p className="mt-2 text-[15px] text-ink-mid">
+            {isTrash
+              ? '털어놓은 만큼 마음이 가벼워졌길 바라요.'
+              : streak >= 2
+                ? `${streak}일 연속으로 쓰고 있어요.`
+                : '수고했어요. 내일은 또 다른 미션이 기다려요.'}
+          </p>
         </div>
-      )}
 
-      {/* Editor */}
-      {!completed && (
-        <div className="max-w-3xl mx-auto px-4 py-6">
-          {/* Mission description reminder */}
-          <div
-            className="mb-6 p-4 rounded-xl border text-sm"
-            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-text-mid)' }}
-          >
-            {mission.description}
-          </div>
-
-          {/* creative-1 inspiration card */}
-          {mission.id === 'creative-1' && typeof extraData?.inspirationCard === 'string' && (
-            <div
-              className="mb-4 p-4 rounded-xl text-sm italic"
-              style={{
-                background: 'var(--color-bg)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-accent)',
-              }}
-            >
-              <span className="text-xs not-italic opacity-60 block mb-1">✨ 오늘의 영감 카드</span>
-              &ldquo;{extraData.inspirationCard}&rdquo;
+        {!isTrash && (
+          <section className="panel mb-6 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <CategoryBadge category={mission.category} />
+              <span className="text-sm font-semibold text-ink">{mission.blackout ? '이렇게 썼어요' : mission.title}</span>
             </div>
-          )}
+            <JournalContent entry={entry} mission={mission} />
+          </section>
+        )}
 
-          {/* Render correct editor */}
-          {isTrash && (
-            <TrashEditor
-              value={content}
-              onChange={setContent}
-              onShred={handleTrashShred}
-            />
+        <div className="flex gap-2">
+          {!isTrash && (
+            <Link to={`/archive/${entry.id}`} className="btn-secondary flex-1 py-3">
+              기록에서 보기
+            </Link>
           )}
-          {isEmoji && (
-            <EmojiEditor value={content} onChange={setContent} />
-          )}
-          {isCanvas && (
-            <CanvasEditor
-              initialDataUrl={journal?.content}
-              onSave={handleCanvasSave}
-              isEmotionTemp={isEmotionTemp}
-            />
-          )}
-          {isTimed && (
-            <TimedTextEditor
-              value={content}
-              onChange={setContent}
-              mission={mission}
-              extraData={extraData}
-              onTimerReady={(v) => setTimedCanComplete(v)}
-            />
-          )}
-          {!isTrash && !isEmoji && !isCanvas && !isTimed && (
-            <TextEditor
-              value={content}
-              onChange={setContent}
-              missionId={mission.id}
-              extraData={extraData}
-              charLimit={mission.charLimit}
-            />
-          )}
+          <Link to="/" className="btn-primary flex-1 py-3">
+            처음으로
+          </Link>
         </div>
-      )}
+      </main>
+    </div>
+  )
+}
+
+function CenteredMessage({ title, body, action }: { title: string; body: string; action: { label: string; to: string } }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-page px-6">
+      <div className="text-center">
+        <h1 className="font-serif text-xl font-bold text-ink">{title}</h1>
+        <p className="mt-2 text-sm text-ink-mid">{body}</p>
+        <Link to={action.to} className="btn-primary mt-6">
+          {action.label}
+        </Link>
+      </div>
     </div>
   )
 }

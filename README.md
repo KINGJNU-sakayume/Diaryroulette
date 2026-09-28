@@ -1,73 +1,57 @@
-# React + TypeScript + Vite
+# 일기 룰렛
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+매일 룰렛이 정해 주는 방식으로 쓰는 일기 앱입니다. 미션을 한 번 뽑으면 그날 하루 동안 바뀌지 않고,
+한 번 나온 미션은 7일 동안 쉬었다가 다시 나옵니다. 모든 기록은 이 기기의 브라우저(IndexedDB)에만 저장됩니다.
 
-Currently, two official plugins are available:
+## 미션 카테고리 (49개)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| 카테고리 | 설명 | 미션 |
+| --- | --- | --- |
+| 언어 (9) | 단어와 글자에 규칙을 걸어 익숙한 문장을 낯설게 | 명사 없이 쓰기, 이다·있다·없다 없이 쓰기, 모음 하나 압수, 한 모음으로만 쓰기, 꾸밈말 빼고 쓰기, 가나다 문장 일기, 외국어로만 쓰기, 가나다 단어 일기, 세 글자 일기 |
+| 시점 (6) | 내가 아닌 다른 눈으로 오늘을 다시 보기 | 물건의 눈으로, 10년 뒤의 내가, 3인칭 관찰자, 악당의 변명, 외계인에게 보내는 보고서, 거꾸로 흐르는 하루 |
+| 시간·분량 (7) | 시간이나 글자 수를 정해 두고 쓰기 | 지우지 않고 1500자, 50자 한 줄, 100자 요약, 30초 쏟아내기, 보이지 않게 쓰기, 5분 논스톱, 정확히 300자 |
+| 그림 (8) | 글 대신 선, 색, 이모지로 남기기 | 마음 가는 대로 선 긋기, 이모지 일기, 몸 지도 그리기, 반대 손으로 그리기, 감정 온도 찍기, 도형으로 하루 조립하기, 한 가지 색의 농담, 하루 보물지도 |
+| 상상 (9) | 엉뚱한 설정 속에서 오늘을 비틀어 보기 | 영감 카드 한 장, 질문으로만 쓰기, 모르는 사람에게 쓰는 편지, 나를 주인공으로 한 신화, 대화로만 쓰기, 마지막 날처럼, 왜인지 모르겠지만…, 완벽한 거짓말 일기, 단어가 생각나지 않을 때 |
+| 양식 (10) | 정해진 칸을 채우다 보면 완성되는 일기 | 하루 세 줄, 뉴스 기사 일기, 레시피 일기, 고마운 세 가지, 오늘의 회고, 마음 일기예보, 셀프 인터뷰, 오늘의 단어 사전, 다섯 감각 일기, 오늘의 영수증 |
 
-## React Compiler
+## 작성 방식
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **글쓰기** — 규칙이 있는 미션은 어긋난 부분에 밑줄이 그어집니다. 명사·꾸밈말 판별처럼 형태소 분석이 필요한
+  규칙은 짐작이라서 화면에도 그렇게 안내합니다. 글자 수 조건은 이모지를 한 글자로 셉니다.
+- **타이머** — 첫 글자를 쓰면 시작하고 끝나면 더 쓸 수 없습니다. 중간에 나갔다 와도 남은 시간부터 이어집니다.
+- **지우기 금지 / 보이지 않게 쓰기** — 모바일 가상 키보드의 삭제까지 막고, 한글 조합 중 수정은 허용합니다.
+- **그리기** — 자유 그리기, 몸 윤곽 밑그림, 도형만, 한 가지 색의 농담, 감정 온도 원 찍기. 되돌리기를 지원하고
+  그림은 테마와 상관없이 같은 종이색 위에 저장됩니다.
+- **이모지** — 이모지·띄어쓰기·줄바꿈만 입력됩니다(숫자·기호 단독은 걸러 냄).
+- **쓰고 파쇄** — 내용은 저장하지 않고 "썼다"는 기록만 남깁니다.
+- **칸 채우기(양식)** — 칸마다 따로 쓰고, 모든 칸을 채우면 완료할 수 있습니다.
 
-## Expanding the ESLint configuration
+새벽 2시 전까지는 전날 일기로 칩니다. 쓰는 중에는 4초마다, 그리고 화면을 떠날 때 자동 저장됩니다.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 개발
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev      # 개발 서버 (오른쪽 아래 DEV 버튼으로 점검 패널)
+npm test         # 단위 테스트 (vitest)
+npm run lint
+npm run build    # 타입 검사 + 프로덕션 빌드
+npm run icons    # public/favicon.svg로 PWA 아이콘 재생성
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+`main` 브랜치에 push하면 GitHub Pages로 배포됩니다.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 구조
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+src/
+  data/        미션·카테고리·영감 카드 (미션 id는 저장된 일기와 연결되는 영구 키 — 바꾸지 말 것)
+  lib/         순수 로직: 규칙 검사(rules), 한글 분해(hangul), 글자 수·이모지(text), 날짜, 연속 기록, 양식
+  db/          IndexedDB 접근
+  hooks/       오늘의 미션·휴식 목록·포커스 트랩
+  components/  에디터(글쓰기·타이머·그리기·이모지·파쇄·칸 채우기), 미션 카드, 공용 UI
+  pages/       오늘 · 쓰기 · 기록 · 쓰던 글 · 통계
+```
+
+미션을 추가할 때는 `src/data/missions.ts`에 항목을 넣으면 됩니다. 자동 규칙 검사가 필요하면 `check`에
+검사기 이름을, 양식이면 `editorType: 'prompts'`와 `prompts` 칸 목록을 지정하세요.

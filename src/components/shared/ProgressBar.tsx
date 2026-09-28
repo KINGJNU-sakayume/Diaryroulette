@@ -1,47 +1,22 @@
 interface ProgressBarProps {
-  value: number      // 0–100 percentage OR current value
-  max?: number       // if provided, value/max is used
+  value: number
+  max: number
   color?: string
-  height?: number
   label?: string
-  showText?: boolean
 }
 
-export default function ProgressBar({
-  value,
-  max,
-  color = '#7c3aed',
-  height = 8,
-  label,
-  showText = false,
-}: ProgressBarProps) {
-  const pct = max !== undefined ? Math.min((value / max) * 100, 100) : Math.min(value, 100)
-
+export default function ProgressBar({ value, max, color = 'var(--color-accent)', label }: ProgressBarProps) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
   return (
-    <div className="w-full">
-      {(label || showText) && (
-        <div className="flex justify-between items-center mb-1">
-          {label && (
-            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-              {label}
-            </span>
-          )}
-          {showText && (
-            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>
-              {max !== undefined ? `${value} / ${max}` : `${Math.round(pct)}%`}
-            </span>
-          )}
-        </div>
-      )}
-      <div
-        className="w-full rounded-full overflow-hidden"
-        style={{ height, background: 'var(--color-card)' }}
-      >
-        <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{ width: `${pct}%`, background: color }}
-        />
-      </div>
+    <div
+      className="h-1.5 w-full overflow-hidden rounded-full bg-card"
+      role="progressbar"
+      aria-valuenow={Math.min(value, max)}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-label={label}
+    >
+      <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${pct}%`, background: color }} />
     </div>
   )
 }

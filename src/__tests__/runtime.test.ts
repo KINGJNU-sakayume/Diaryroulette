@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { getLocalDateString } from '../hooks/useTodayMission'
 import { validateExportData } from '../utils/importData'
-import { missions, CATEGORY_COLORS, CATEGORY_LABELS } from '../data/missions'
+import { missions, getMission } from '../data/missions'
+import { CATEGORIES, CATEGORY_ORDER } from '../data/categories'
+import { availableMissions } from '../hooks/useCooldown'
+import { drawExtraData } from '../lib/draw'
+import { DRAWABLE_VOWELS } from '../lib/hangul'
 import type { ExportData } from '../utils/exportData'
 
 // ─── getLocalDateString ───────────────────────────────────────────────────────
@@ -111,132 +115,179 @@ describe('validateExportData — valid inputs', () => {
   })
 })
 
-// ─── missions array ───────────────────────────────────────────────────────────
+// ─── validateExportData — 항목 단위 검증 ─────────────────────────────────────
 
-describe('missions array — shape and counts', () => {
-  it('missions array has exactly 36 items', () => {
-    expect(missions).toHaveLength(36)
+describe('validateExportData — entries', () => {
+  const journal = {
+    id: '2026-09-01',
+    missionId: 'form-1',
+    type: 'text',
+    content: '【첫 번째】\n버스가 바로 왔다.',
+    status: 'completed',
+    createdAt: '2026-09-01T10:00:00.000Z',
+    completedAt: '2026-09-01T10:10:00.000Z',
+    extraData: { answers: [{ label: '첫 번째', value: '버스가 바로 왔다.' }] },
+  }
+
+  it('양식 일기(extraData.answers)를 그대로 받아들인다', () => {
+    const result = validateExportData({ ...minimalValid, journals: [journal] })
+    expect(result.data?.journals).toHaveLength(1)
+    expect(result.warning).toBeUndefined()
   })
 
-  it('all mission ids are unique strings', () => {
-    const ids = missions.map((m) => m.id)
-    expect(new Set(ids).size).toBe(36)
-  })
-
-  it('lang category has exactly 7 missions', () => {
-    expect(missions.filter((m) => m.category === 'lang')).toHaveLength(7)
-  })
-
-  it('view category has exactly 7 missions', () => {
-    expect(missions.filter((m) => m.category === 'view')).toHaveLength(7)
-  })
-
-  it('time category has exactly 8 missions', () => {
-    expect(missions.filter((m) => m.category === 'time')).toHaveLength(8)
-  })
-
-  it('visual category has exactly 6 missions', () => {
-    expect(missions.filter((m) => m.category === 'visual')).toHaveLength(6)
-  })
-
-  it('creative category has exactly 8 missions', () => {
-    expect(missions.filter((m) => m.category === 'creative')).toHaveLength(8)
+  it('알 수 없는 미션·잘못된 날짜·위험한 이미지 주소는 빼고 경고한다', () => {
+    const result = validateExportData({
+      ...minimalValid,
+      journals: [
+        journal,
+        { ...journal, id: '2026-09-02', missionId: 'nope-1' },
+        { ...journal, id: '2026-02-30' },
+        { ...journal, id: '2026-09-03', missionId: 'visual-1', type: 'canvas', content: 'javascript:alert(1)' },
+      ],
+    })
+    expect(result.data?.journals.map((j) => j.id)).toEqual(['2026-09-01'])
+    expect(result.warning).toContain('3건')
   })
 })
 
-describe('missions array — field integrity', () => {
-  const validEditorTypes = new Set(['text', 'timed-text', 'canvas', 'emoji-only', 'trash'])
+// ─── missions ───────────────────────────────────────────────────────────────
 
-  it('every mission has a non-empty id, title, and description', () => {
-    expect(
-      missions.every((m) => m.id.length > 0 && m.title.length > 0 && m.description.length > 0),
-    ).toBe(true)
+describe('missions — shape', () => {
+  it('미션 id가 겹치지 않는다', () => {
+    expect(new Set(missions.map((m) => m.id)).size).toBe(missions.length)
   })
 
-  it('every mission has a valid editorType', () => {
-    expect(missions.every((m) => validEditorTypes.has(m.editorType))).toBe(true)
+  it('예전 버전에서 저장된 미션 id가 모두 남아 있다 (기록이 끊기지 않도록)', () => {
+    const legacyIds = [
+      ...Array.from({ length: 9 }, (_, i) => `lang-${i + 1}`),
+      ...Array.from({ length: 7 }, (_, i) => `view-${i + 1}`),
+      ...Array.from({ length: 8 }, (_, i) => `time-${i + 1}`),
+      ...Array.from({ length: 8 }, (_, i) => `visual-${i + 1}`),
+      ...Array.from({ length: 10 }, (_, i) => `creative-${i + 1}`),
+    ]
+    expect(legacyIds.filter((id) => !getMission(id))).toEqual([])
   })
 
-  it('every mission id matches pattern category-number', () => {
-    expect(
-      missions.every((m) => /^(lang|view|time|visual|creative)-\d+$/.test(m.id)),
-    ).toBe(true)
+  it('모든 카테고리에 미션이 하나 이상 있다', () => {
+    for (const cat of CATEGORY_ORDER) {
+      expect(missions.some((m) => m.category === cat)).toBe(true)
+    }
   })
 
-  it('missions with timerSeconds have a positive integer value', () => {
-    const timed = missions.filter((m) => m.timerSeconds !== undefined)
+  it('id 접두어는 알려진 것만 쓴다', () => {
+    expect(missions.every((m) => /^(lang|view|time|visual|creative|form)-\d+$/.test(m.id))).toBe(true)
+  })
+
+  it('제목과 설명이 비어 있지 않다', () => {
+    expect(missions.every((m) => m.title.trim() && m.description.trim())).toBe(true)
+  })
+})
+
+describe('missions — 작성 방식별 설정', () => {
+  it('타이머 미션은 양의 정수 초를 가진다', () => {
+    const timed = missions.filter((m) => m.editorType === 'timed-text')
     expect(timed.length).toBeGreaterThan(0)
     expect(timed.every((m) => Number.isInteger(m.timerSeconds) && (m.timerSeconds ?? 0) > 0)).toBe(true)
   })
 
-  it('missions with charLimit have valid min/max structure', () => {
-    const limited = missions.filter((m) => m.charLimit !== undefined)
-    expect(limited.length).toBeGreaterThan(0)
-    for (const m of limited) {
+  it('타이머가 있는 미션은 타이머 방식이다', () => {
+    expect(missions.filter((m) => m.timerSeconds).every((m) => m.editorType === 'timed-text')).toBe(true)
+  })
+
+  it('글자 수 제한은 min <= max 이다', () => {
+    for (const m of missions.filter((x) => x.charLimit)) {
       const { min, max } = m.charLimit!
       if (min !== undefined) expect(min).toBeGreaterThan(0)
       if (max !== undefined) expect(max).toBeGreaterThan(0)
-      if (min !== undefined && max !== undefined) expect(min).toBeLessThan(max)
+      if (min !== undefined && max !== undefined) expect(min).toBeLessThanOrEqual(max)
     }
   })
 
-  it('time-1 has backspaceDisabled set to true', () => {
-    expect(missions.find((m) => m.id === 'time-1')?.backspaceDisabled).toBe(true)
+  it('그리기 미션은 캔버스 모드를, 양식 미션은 칸 목록을 가진다', () => {
+    for (const m of missions) {
+      if (m.editorType === 'canvas') expect(m.canvasMode).toBeDefined()
+      if (m.editorType === 'prompts') expect(m.prompts?.length).toBeGreaterThan(0)
+      if (m.canvasMode) expect(m.editorType).toBe('canvas')
+      if (m.prompts) expect(m.editorType).toBe('prompts')
+    }
   })
 
-  it('creative-8 has editorType of trash', () => {
-    expect(missions.find((m) => m.id === 'creative-8')?.editorType).toBe('trash')
+  it('양식 미션의 칸 이름은 한 미션 안에서 겹치지 않는다', () => {
+    for (const m of missions.filter((x) => x.prompts)) {
+      const labels = m.prompts!.map((p) => p.label)
+      expect(new Set(labels).size).toBe(labels.length)
+    }
+  })
+
+  it('접두어 검사 미션은 접두어를 가진다', () => {
+    for (const m of missions.filter((x) => x.check === 'sentence-prefix')) {
+      expect(m.sentencePrefix).toBeTruthy()
+    }
+  })
+
+  it('time-1은 지우기 금지, creative-8은 파쇄 방식이다', () => {
+    expect(getMission('time-1')?.noDelete).toBe(true)
+    expect(getMission('creative-8')?.editorType).toBe('trash')
   })
 })
 
-// ─── CATEGORY_COLORS / CATEGORY_LABELS ───────────────────────────────────────
+describe('drawExtraData', () => {
+  it('모음 미션은 기본 모음 중에서 뽑는다', () => {
+    for (let i = 0; i < 20; i++) {
+      const banned = drawExtraData(getMission('lang-3')!)?.bannedVowel
+      const allowed = drawExtraData(getMission('lang-4')!)?.allowedVowel
+      expect(DRAWABLE_VOWELS).toContain(banned)
+      expect(DRAWABLE_VOWELS).toContain(allowed)
+    }
+  })
 
-const CATEGORIES = ['lang', 'view', 'time', 'visual', 'creative'] as const
+  it('영감 카드 미션은 문장을 하나 뽑는다', () => {
+    expect(typeof drawExtraData(getMission('creative-1')!)?.inspirationCard).toBe('string')
+  })
+
+  it('추첨이 없는 미션은 undefined', () => {
+    expect(drawExtraData(getMission('view-1')!)).toBeUndefined()
+  })
+})
+
+describe('availableMissions', () => {
+  const now = new Date('2026-09-28T12:00:00')
+
+  it('7일 안에 뽑힌 미션은 빠진다', () => {
+    const list = availableMissions([{ missionId: 'lang-1', drawnAt: '2026-09-25T12:00:00' }], now)
+    expect(list.some((m) => m.id === 'lang-1')).toBe(false)
+    expect(list).toHaveLength(missions.length - 1)
+  })
+
+  it('7일이 지나면 다시 나온다', () => {
+    const list = availableMissions([{ missionId: 'lang-1', drawnAt: '2026-09-20T12:00:00' }], now)
+    expect(list.some((m) => m.id === 'lang-1')).toBe(true)
+  })
+
+  it('전부 쉬는 중이면 가장 오래된 미션 하나를 풀어 준다', () => {
+    const all = missions.map((m, i) => ({ missionId: m.id, drawnAt: new Date(now.getTime() - (i + 1) * 60_000).toISOString() }))
+    const list = availableMissions(all, now)
+    expect(list.map((m) => m.id)).toEqual([missions[missions.length - 1].id])
+  })
+})
+
+// ─── categories ───────────────────────────────────────────────────────────────
+
 const HEX_RE = /^#[0-9a-f]{6}$/i
 
-describe('CATEGORY_COLORS', () => {
-  it('has entries for all 5 categories', () => {
-    expect(CATEGORIES.every((c) => c in CATEGORY_COLORS)).toBe(true)
+describe('CATEGORIES', () => {
+  it('순서 목록과 정의가 일치한다', () => {
+    expect(Object.keys(CATEGORIES).sort()).toEqual([...CATEGORY_ORDER].sort())
   })
 
-  it('each entry has bg, text, and border string properties', () => {
-    expect(
-      CATEGORIES.every((c) => {
-        const v = CATEGORY_COLORS[c]
-        return typeof v.bg === 'string' && typeof v.text === 'string' && typeof v.border === 'string'
-      }),
-    ).toBe(true)
+  it('색상 값이 올바른 hex다', () => {
+    for (const cat of CATEGORY_ORDER) {
+      const c = CATEGORIES[cat]
+      expect(HEX_RE.test(c.color)).toBe(true)
+    }
   })
 
-  it('bg values are valid hex color strings', () => {
-    expect(CATEGORIES.every((c) => HEX_RE.test(CATEGORY_COLORS[c].bg))).toBe(true)
-  })
-
-  it('text values are valid hex color strings', () => {
-    expect(CATEGORIES.every((c) => HEX_RE.test(CATEGORY_COLORS[c].text))).toBe(true)
-  })
-
-  it('border values are valid hex color strings', () => {
-    expect(CATEGORIES.every((c) => HEX_RE.test(CATEGORY_COLORS[c].border))).toBe(true)
-  })
-})
-
-describe('CATEGORY_LABELS', () => {
-  it('has entries for all 5 categories', () => {
-    expect(CATEGORIES.every((c) => c in CATEGORY_LABELS)).toBe(true)
-  })
-
-  it('each value is a non-empty string', () => {
-    expect(
-      Object.values(CATEGORY_LABELS).every((v) => typeof v === 'string' && v.length > 0),
-    ).toBe(true)
-  })
-
-  it('values match the known Korean labels exactly', () => {
-    expect(CATEGORY_LABELS.lang).toBe('언어')
-    expect(CATEGORY_LABELS.view).toBe('시점')
-    expect(CATEGORY_LABELS.time).toBe('시간')
-    expect(CATEGORY_LABELS.visual).toBe('시각')
-    expect(CATEGORY_LABELS.creative).toBe('창의')
+  it('이름과 소개가 비어 있지 않다', () => {
+    expect(CATEGORY_ORDER.every((c) => CATEGORIES[c].label && CATEGORIES[c].blurb)).toBe(true)
   })
 })

@@ -1,536 +1,352 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Download, Upload } from 'lucide-react'
 import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { useCooldown } from '../hooks/useCooldown'
-import { missions, CATEGORY_COLORS, CATEGORY_LABELS, type MissionCategory } from '../data/missions'
-import { exportToJSON } from '../utils/exportData'
-import { validateExportData, importFromJSON } from '../utils/importData'
-import type { ExportData } from '../utils/exportData'
+import { getMission, missions } from '../data/missions'
+import { CATEGORIES, CATEGORY_ORDER, type MissionCategory } from '../data/categories'
+import { addDays, formatDateShort, getEffectiveDateString, parseDateId } from '../lib/date'
+import { computeStreaks } from '../lib/streak'
+import { exportToJSON, type ExportData } from '../utils/exportData'
+import { importFromJSON, validateExportData } from '../utils/importData'
+import Loading from '../components/shared/Loading'
+import Modal from '../components/shared/Modal'
 
 export default function Stats() {
-  const [journals, setJournals] = useState<JournalEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  const [journals, setJournals] = useState<JournalEntry[] | null>(null)
   const { getActiveCooldowns, loading: cooldownLoading } = useCooldown()
+  const today = getEffectiveDateString()
 
   useEffect(() => {
+    let alive = true
     getAllJournals()
-      .then((list) => setJournals(list.filter((j) => j.status === 'completed')))
-      .finally(() => setLoading(false))
+      .then((list) => {
+        if (alive) setJournals(list.filter((j) => j.status === 'completed'))
+      })
+      .catch(() => {
+        if (alive) setJournals([])
+      })
+    return () => {
+      alive = false
+    }
   }, [])
 
-  if (loading || cooldownLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <div className="text-sm animate-pulse" style={{ color: 'var(--color-muted)' }}>로딩 중…</div>
-      </div>
+  const stats = useMemo(() => {
+    const list = journals ?? []
+    const byCategory = Object.fromEntries(CATEGORY_ORDER.map((c) => [c, 0])) as Record<MissionCategory, number>
+    const byMission: Record<string, number> = {}
+    for (const j of list) {
+      const m = getMission(j.missionId)
+      if (m) byCategory[m.category]++
+      byMission[j.missionId] = (byMission[j.missionId] ?? 0) + 1
+    }
+    const { current, longest } = computeStreaks(
+      list.map((j) => j.id),
+      today,
     )
-  }
+    const thisMonth = list.filter((j) => j.id.startsWith(today.slice(0, 7))).length
+    return { total: list.length, byCategory, byMission, current, longest, thisMonth }
+  }, [journals, today])
 
-  const completedCount = journals.length
+  if (!journals || cooldownLoading) return <Loading />
 
-  // Count by category
-  const categoryCount: Record<MissionCategory, number> = {
-    lang: 0, view: 0, time: 0, visual: 0, creative: 0,
-  }
-  for (const j of journals) {
-    const m = missions.find((x) => x.id === j.missionId)
-    if (m) categoryCount[m.category]++
-  }
+  const resting = new Map(getActiveCooldowns().map((c) => [c.missionId, c.daysLeft]))
+  const maxCategory = Math.max(1, ...Object.values(stats.byCategory))
 
-  // Count completions per mission (can exceed 1 due to 7-day rolling cooldown)
-  const missionCount: Record<string, number> = {}
-  for (const j of journals) {
-    missionCount[j.missionId] = (missionCount[j.missionId] ?? 0) + 1
-  }
+  return (
+    <div className="mx-auto max-w-2xl space-y-5 px-4 pt-6">
+      <h1 className="font-serif text-2xl font-bold text-ink">통계</h1>
 
-  const activeCooldowns = getActiveCooldowns()
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile label="모든 기록" value={stats.total} unit="편" />
+        <StatTile label="지금 연속" value={stats.current} unit="일" />
+        <StatTile label="최장 연속" value={stats.longest} unit="일" />
+        <StatTile label="이번 달" value={stats.thisMonth} unit="편" />
+      </div>
+
+      <Section title="기록 달력" description="최근 20주 동안 일기를 쓴 날이에요.">
+        <Calendar journals={journals} today={today} />
+      </Section>
+
+      <Section title="카테고리별 기록">
+        {stats.total === 0 ? (
+          <p className="text-sm text-muted">일기를 마치면 어떤 종류를 많이 썼는지 보여 드릴게요.</p>
+        ) : (
+          <ul className="space-y-2.5">
+            {CATEGORY_ORDER.map((cat) => {
+              const n = stats.byCategory[cat]
+              const pct = Math.round((n / stats.total) * 100)
+              return (
+                <li key={cat} className="grid grid-cols-[5.5rem_1fr_2.5rem] items-center gap-3 text-sm" title={`${CATEGORIES[cat].label} ${n}편 (${pct}%)`}>
+                  <span className="flex items-center gap-2 text-ink-mid">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: CATEGORIES[cat].color }} aria-hidden="true" />
+                    {CATEGORIES[cat].label}
+                  </span>
+                  <span className="h-2 overflow-hidden rounded-full bg-card">
+                    <span
+                      className="block h-full rounded-full"
+                      style={{ width: `${(n / maxCategory) * 100}%`, background: CATEGORIES[cat].color }}
+                    />
+                  </span>
+                  <span className="text-right tabular-nums text-ink">{n}</span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="미션별 기록" description="한 번 나온 미션은 7일 동안 쉬었다가 다시 나와요.">
+        <div className="space-y-2">
+          {CATEGORY_ORDER.map((cat) => {
+            const list = missions.filter((m) => m.category === cat)
+            const done = list.filter((m) => stats.byMission[m.id]).length
+            return (
+              <details key={cat} className="group rounded-xl border border-line [&_summary::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm">
+                  <span className="h-2 w-2 rounded-full" style={{ background: CATEGORIES[cat].color }} aria-hidden="true" />
+                  <span className="font-semibold text-ink">{CATEGORIES[cat].label}</span>
+                  <span className="hidden text-muted sm:inline">· {CATEGORIES[cat].blurb}</span>
+                  <span className="ml-auto shrink-0 text-muted">
+                    {done}/{list.length}
+                  </span>
+                </summary>
+                <table className="w-full border-t border-line text-sm">
+                  <thead className="sr-only">
+                    <tr>
+                      <th>미션</th>
+                      <th>쓴 횟수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((m) => {
+                      const n = stats.byMission[m.id] ?? 0
+                      const days = resting.get(m.id)
+                      return (
+                        <tr key={m.id} className="border-b border-line last:border-0">
+                          <td className="px-4 py-2.5">
+                            <span className={n ? 'text-ink' : 'text-muted'}>{m.title}</span>
+                            {days !== undefined && <span className="ml-2 whitespace-nowrap text-xs text-muted">{days}일 뒤 다시 나와요</span>}
+                          </td>
+                          <td className="w-16 px-4 py-2.5 text-right tabular-nums text-ink-mid">{n ? `${n}번` : '–'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </details>
+            )
+          })}
+        </div>
+      </Section>
+
+      <Section title="백업" description="일기는 이 기기의 브라우저에만 저장돼요. 기기를 바꾸거나 브라우저 데이터를 지우기 전에 파일로 백업해 두세요.">
+        <Backup />
+      </Section>
+    </div>
+  )
+}
+
+function StatTile({ label, value, unit }: { label: string; value: number; unit: string }) {
+  return (
+    <div className="panel px-4 py-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 font-serif text-2xl font-bold text-ink">
+        {value.toLocaleString()}
+        <span className="ml-0.5 font-sans text-sm font-normal text-ink-mid">{unit}</span>
+      </p>
+    </div>
+  )
+}
+
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <section className="panel p-5">
+      <h2 className="text-base font-bold text-ink">{title}</h2>
+      {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+      <div className="mt-4">{children}</div>
+    </section>
+  )
+}
+
+// ─── 기록 달력 ────────────────────────────────────────────────────────────────
+
+const WEEKS = 20
+const CELL = 13
+const GAP = 3
+const LEFT = 18
+const TOP = 14
+const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+
+function Calendar({ journals, today }: { journals: JournalEntry[]; today: string }) {
+  const [hover, setHover] = useState<string | null>(null)
+  const written = useMemo(() => new Map(journals.map((j) => [j.id, j])), [journals])
+
+  // 맨 오른쪽 열이 이번 주가 되도록, 20주 전 일요일부터 시작한다
+  const start = addDays(today, -(parseDateId(today).getDay() + (WEEKS - 1) * 7))
+  const days = Array.from({ length: WEEKS * 7 }, (_, i) => addDays(start, i))
+
+  const hoverEntry = hover ? written.get(hover) : undefined
+  const hoverText = hover
+    ? `${formatDateShort(hover)} · ${hoverEntry ? (getMission(hoverEntry.missionId)?.title ?? '일기') : '기록 없음'}`
+    : '칸을 누르거나 가리키면 그날의 미션이 보여요'
+
+  const width = LEFT + WEEKS * (CELL + GAP) - GAP
+  const height = TOP + 7 * (CELL + GAP) - GAP
 
   return (
     <div>
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Donut chart */}
-        <Section title="카테고리별 완료">
-          <DonutChart categoryCount={categoryCount} total={completedCount} />
-          <div className="grid grid-cols-5 gap-2 mt-4">
-            {(Object.keys(categoryCount) as MissionCategory[]).map((cat) => (
-              <div key={cat} className="text-center">
-                <div
-                  className="w-3 h-3 rounded-full mx-auto mb-1"
-                  style={{ background: CATEGORY_COLORS[cat].bg }}
-                />
-                <p className="text-xs" style={{ color: 'var(--color-muted)' }}>{CATEGORY_LABELS[cat]}</p>
-                <p className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>{categoryCount[cat]}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        {/* Per-mission completion counts */}
-        <Section title="미션별 완료 횟수">
-          <div className="space-y-5">
-            {(Object.keys(CATEGORY_LABELS) as MissionCategory[]).map((cat) => {
-              const catMissions = missions.filter((m) => m.category === cat)
-              const colors = CATEGORY_COLORS[cat]
-              return (
-                <div key={cat}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: colors.bg }} />
-                    <span className="text-xs font-bold uppercase tracking-wider"
-                      style={{ color: colors.text }}>
-                      {CATEGORY_LABELS[cat]}
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    {catMissions.map((m) => {
-                      const count = missionCount[m.id] ?? 0
-                      const barWidth = count === 0 ? 0 : Math.min((count / Math.max(...Object.values(missionCount), 1)) * 100, 100)
-                      return (
-                        <div key={m.id}
-                          className="flex items-center gap-3 py-1.5 px-3 rounded-lg"
-                          style={{ background: 'var(--color-card)' }}>
-                          <span className="text-xs flex-1 truncate"
-                            style={{ color: count > 0 ? 'var(--color-text)' : 'var(--color-muted)' }}>
-                            {m.title}
-                          </span>
-                          <div className="w-20 h-1.5 rounded-full overflow-hidden"
-                            style={{ background: 'var(--color-border)' }}>
-                            <div className="h-full rounded-full transition-all"
-                              style={{ width: `${barWidth}%`, background: colors.bg }} />
-                          </div>
-                          <span className="text-xs font-bold tabular-nums w-6 text-right"
-                            style={{ color: count > 0 ? colors.text : 'var(--color-muted)' }}>
-                            {count}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Section>
-
-        {/* Streak calendar */}
-        <Section title="기록 달력">
-          <StreakCalendar journals={journals} />
-        </Section>
-
-        {/* Cooldowns */}
-        {activeCooldowns.length > 0 && (
-          <Section title={`쿨다운 중 (${activeCooldowns.length}개)`}>
-            <div className="space-y-2">
-              {activeCooldowns.map((entry) => {
-                const mission = missions.find((m) => m.id === entry.missionId)
-                if (!mission) return null
-                const colors = CATEGORY_COLORS[mission.category]
-                return (
-                  <div
-                    key={entry.missionId}
-                    className="flex items-center justify-between p-3 rounded-lg border"
-                    style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ background: colors.bg }} />
-                      <span className="text-xs" style={{ color: 'var(--color-text)' }}>{mission.title}</span>
-                    </div>
-                    <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{entry.daysLeft}일 후 해금</span>
-                  </div>
-                )
-              })}
-            </div>
-          </Section>
-        )}
-
-        {/* Data Management */}
-        <Section title="데이터 관리 / Data Management">
-          <DataManagement />
-        </Section>
-      </div>
-    </div>
-  )
-}
-
-// ─── Data Management ──────────────────────────────────────────────────────────
-
-function DataManagement() {
-  const [showConfirm, setShowConfirm] = useState(false)
-  const [pendingData, setPendingData] = useState<ExportData | null>(null)
-  const [importWarning, setImportWarning] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  function showToast(msg: string, ok: boolean) {
-    setToast({ msg, ok })
-    setTimeout(() => setToast(null), 4000)
-  }
-
-  async function handleExport() {
-    try {
-      await exportToJSON()
-      showToast('내보내기 완료 ✅', true)
-    } catch (e) {
-      showToast(`내보내기 실패: ${e}`, false)
-    }
-  }
-
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const text = event.target?.result as string
-      let raw: unknown
-      try {
-        raw = JSON.parse(text)
-      } catch {
-        showToast('올바른 JSON 파일이 아닙니다.', false)
-        return
-      }
-
-      const result = validateExportData(raw)
-      if (!result.valid || !result.data) {
-        showToast('올바른 JSON 파일이 아닙니다.', false)
-        return
-      }
-
-      setPendingData(result.data)
-      setImportWarning(result.warning ?? null)
-      setShowConfirm(true)
-    }
-    reader.readAsText(file)
-  }
-
-  async function handleConfirmImport() {
-    if (!pendingData) return
-    setShowConfirm(false)
-    try {
-      await importFromJSON(pendingData)
-      showToast('가져오기 완료 ✅', true)
-      setTimeout(() => window.location.reload(), 1200)
-    } catch (e) {
-      showToast(`가져오기 실패: ${e}`, false)
-    }
-    setPendingData(null)
-    setImportWarning(null)
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-        캔버스 항목이 많으면 백업 파일이 클 수 있습니다. JSON 파일에는 모든 일기와 미션 기록이 포함됩니다.
-      </p>
-
-      <div className="flex gap-3 flex-wrap">
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80 active:scale-95"
-          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-        >
-          📤 Export JSON
-        </button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80 active:scale-95"
-          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-        >
-          📥 Import JSON
-        </button>
-      </div>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-
-      {/* Confirmation modal */}
-      {showConfirm && pendingData && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.7)',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1rem',
-          }}
-        >
-          <div
-            className="rounded-2xl border p-6 max-w-sm w-full space-y-4"
-            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-          >
-            <h3 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>데이터 가져오기</h3>
-            {importWarning && (
-              <p className="text-xs text-amber-400 bg-amber-400/10 rounded-lg px-3 py-2">
-                ⚠️ {importWarning}
-              </p>
-            )}
-            <p className="text-sm" style={{ color: 'var(--color-text-mid)' }}>
-              이 작업은 현재 데이터를 모두 덮어씁니다. 계속하시겠습니까?
-            </p>
-            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-              This will overwrite all current data. Continue?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowConfirm(false); setPendingData(null) }}
-                className="flex-1 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-muted)' }}
-              >
-                취소
-              </button>
-              <button
-                onClick={handleConfirmImport}
-                className="flex-1 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--color-accent)', color: '#fff' }}
-              >
-                가져오기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast */}
-      {toast && (
-        <div
-          className="rounded-lg px-4 py-2 text-sm font-medium"
-          style={{
-            background: toast.ok ? '#1a2e1a' : '#2e1a1a',
-            border: `1px solid ${toast.ok ? '#2ea043' : '#da3633'}`,
-            color: toast.ok ? '#3fb950' : '#f85149',
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border p-5" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-      <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: 'var(--color-text-mid)' }}>{title}</h2>
-      {children}
-    </div>
-  )
-}
-
-// ─── Donut Chart ──────────────────────────────────────────────────────────────
-
-function DonutChart({
-  categoryCount,
-  total,
-}: {
-  categoryCount: Record<MissionCategory, number>
-  total: number
-}) {
-  const SIZE = 160
-  const cx = SIZE / 2
-  const cy = SIZE / 2
-  const r = 55
-  const innerR = 35
-
-  if (total === 0) {
-    return (
-      <div className="flex justify-center">
-        <svg width={SIZE} height={SIZE}>
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--color-card)" strokeWidth={r - innerR} />
-          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fill="var(--color-muted)">
-            없음
-          </text>
-        </svg>
-      </div>
-    )
-  }
-
-  const categories = Object.keys(categoryCount) as MissionCategory[]
-  let cumulative = 0
-  const slices: Array<{ path?: string; isFullCircle?: boolean; color: string }> = []
-
-  const toRad = (deg: number) => (deg * Math.PI) / 180
-  const R = r
-  const IR = innerR
-  const strokeW = R - IR
-  const midR = (R + IR) / 2
-
-  for (const cat of categories) {
-    const count = categoryCount[cat]
-    if (count === 0) continue
-    const frac = count / total
-
-    if (frac === 1) {
-      slices.push({ isFullCircle: true, color: CATEGORY_COLORS[cat].bg })
-    } else {
-      const startAngle = cumulative * 360 - 90
-      const endAngle = (cumulative + frac) * 360 - 90
-      const large = frac > 0.5 ? 1 : 0
-
-      const x1 = cx + midR * Math.cos(toRad(startAngle))
-      const y1 = cy + midR * Math.sin(toRad(startAngle))
-      const x2 = cx + midR * Math.cos(toRad(endAngle))
-      const y2 = cy + midR * Math.sin(toRad(endAngle))
-
-      slices.push({
-        path: `M ${x1} ${y1} A ${midR} ${midR} 0 ${large} 1 ${x2} ${y2}`,
-        color: CATEGORY_COLORS[cat].bg,
-      })
-    }
-    cumulative += frac
-  }
-
-  return (
-    <div className="flex justify-center">
-      <svg width={SIZE} height={SIZE}>
-        {/* Background ring */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={midR}
-          fill="none"
-          stroke="var(--color-card)"
-          strokeWidth={strokeW}
-        />
-        {/* Slices */}
-        {slices.map((slice, i) =>
-          slice.isFullCircle ? (
-            <circle
-              key={i}
-              cx={cx}
-              cy={cy}
-              r={midR}
-              fill="none"
-              stroke={slice.color}
-              strokeWidth={strokeW - 2}
-            />
-          ) : (
-            <path
-              key={i}
-              d={slice.path!}
-              fill="none"
-              stroke={slice.color}
-              strokeWidth={strokeW - 2}
-              strokeLinecap="round"
-            />
-          )
-        )}
-        {/* Center text */}
-        <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" fontSize="20" fontWeight="bold" fill="var(--color-text)">
-          {total}
-        </text>
-        <text x={cx} y={cy + 12} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="var(--color-muted)">
-          완료
-        </text>
-      </svg>
-    </div>
-  )
-}
-
-// ─── Streak Calendar ──────────────────────────────────────────────────────────
-
-function StreakCalendar({ journals }: { journals: JournalEntry[] }) {
-  const completedDateMap = new Map<string, MissionCategory>()
-  journals.forEach((j) => {
-    const m = missions.find((x) => x.id === j.missionId)
-    if (m) completedDateMap.set(j.id, m.category)
-  })
-
-  // Show last 16 weeks (112 days)
-  const today = new Date()
-  const WEEKS = 16
-  const days: Array<{ date: string; category: MissionCategory | null }> = []
-
-  for (let i = WEEKS * 7 - 1; i >= 0; i--) {
-    const d = new Date(today)
-    d.setDate(today.getDate() - i)
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    days.push({ date: dateStr, category: completedDateMap.get(dateStr) ?? null })
-  }
-
-  const CELL = 12
-  const GAP = 2
-  const LEFT_MARGIN = 20
-  const TOP_MARGIN = 14
-  const colCount = WEEKS
-  const rowCount = 7
-
-  const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
-
-  return (
-    <div className="overflow-x-auto">
-      <svg
-        width={LEFT_MARGIN + colCount * (CELL + GAP) - GAP}
-        height={TOP_MARGIN + rowCount * (CELL + GAP) - GAP}
-        className="block"
-      >
-        {/* Weekday labels (Mon, Wed, Fri only) */}
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label={`최근 ${WEEKS}주 동안 ${days.filter((d) => written.has(d)).length}일 기록`}>
         {[1, 3, 5].map((row) => (
-          <text
-            key={row}
-            x={LEFT_MARGIN - 2}
-            y={TOP_MARGIN + row * (CELL + GAP) + CELL / 2}
-            textAnchor="end"
-            fontSize="8"
-            fill="var(--color-muted)"
-            dominantBaseline="middle"
-          >
+          <text key={row} x={LEFT - 5} y={TOP + row * (CELL + GAP) + CELL / 2} textAnchor="end" dominantBaseline="middle" fontSize="8" fill="var(--color-muted)">
             {DAY_LABELS[row]}
           </text>
         ))}
-
-        {/* Month labels */}
-        {Array.from({ length: colCount }, (_, col) => {
-          const firstDayOfCol = days[col * 7]
-          if (!firstDayOfCol) return null
-          const month = parseInt(firstDayOfCol.date.slice(5, 7), 10)
-          const prevFirstDay = col > 0 ? days[(col - 1) * 7] : null
-          const prevMonth = prevFirstDay ? parseInt(prevFirstDay.date.slice(5, 7), 10) : -1
-          if (col === 0 || month !== prevMonth) {
-            return (
-              <text
-                key={`month-${col}`}
-                x={LEFT_MARGIN + col * (CELL + GAP)}
-                y={TOP_MARGIN - 3}
-                fontSize="8"
-                fill="var(--color-muted)"
-              >
-                {month}월
-              </text>
-            )
-          }
-          return null
+        {Array.from({ length: WEEKS }, (_, col) => {
+          const first = days[col * 7]
+          const month = parseDateId(first).getMonth()
+          const prevMonth = col > 0 ? parseDateId(days[(col - 1) * 7]).getMonth() : -1
+          if (month === prevMonth) return null
+          return (
+            <text key={col} x={LEFT + col * (CELL + GAP)} y={TOP - 4} fontSize="8" fill="var(--color-muted)">
+              {month + 1}월
+            </text>
+          )
         })}
-
-        {/* Day cells */}
-        {days.map(({ date, category }, i) => {
+        {days.map((d, i) => {
+          if (d > today) return null
           const col = Math.floor(i / 7)
           const row = i % 7
-          const x = LEFT_MARGIN + col * (CELL + GAP)
-          const y = TOP_MARGIN + row * (CELL + GAP)
+          const isWritten = written.has(d)
           return (
             <rect
-              key={date}
-              x={x}
-              y={y}
+              key={d}
+              x={LEFT + col * (CELL + GAP)}
+              y={TOP + row * (CELL + GAP)}
               width={CELL}
               height={CELL}
-              rx={2}
-              fill={category ? CATEGORY_COLORS[category].bg : 'var(--color-card)'}
-              opacity={category ? 1 : 0.6}
-            >
-              <title>{date}</title>
-            </rect>
+              rx={3}
+              fill={isWritten ? 'var(--color-accent)' : 'var(--color-card)'}
+              stroke={d === today ? 'var(--color-text)' : 'none'}
+              strokeWidth={d === today ? 1.5 : 0}
+              onPointerEnter={() => setHover(d)}
+              onPointerDown={() => setHover(d)}
+              onPointerLeave={() => setHover(null)}
+            />
           )
         })}
       </svg>
-      <p className="text-xs mt-2" style={{ color: 'var(--color-muted)' }}>최근 16주</p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+        <span aria-live="polite" className={hover ? 'text-ink-mid' : undefined}>
+          {hoverText}
+        </span>
+        <span className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-sm bg-accent" /> 쓴 날
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-sm bg-card" /> 안 쓴 날
+          </span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ─── 백업 ─────────────────────────────────────────────────────────────────────
+
+function Backup() {
+  const [pending, setPending] = useState<{ data: ExportData; warning?: string } | null>(null)
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const notify = (text: string, ok: boolean) => setMessage({ text, ok })
+
+  const handleExport = async () => {
+    try {
+      await exportToJSON()
+      notify('백업 파일을 저장했어요.', true)
+    } catch {
+      notify('백업 파일을 만들지 못했어요.', false)
+    }
+  }
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    file
+      .text()
+      .then((text) => {
+        const result = validateExportData(JSON.parse(text))
+        if (!result.valid || !result.data) throw new Error('invalid')
+        setPending({ data: result.data, warning: result.warning })
+      })
+      .catch(() => notify('일기 룰렛 백업 파일이 아닌 것 같아요.', false))
+  }
+
+  const confirmImport = async () => {
+    if (!pending) return
+    setBusy(true)
+    try {
+      await importFromJSON(pending.data)
+      setPending(null)
+      notify('백업을 불러왔어요. 화면을 새로 고칠게요.', true)
+      setTimeout(() => window.location.reload(), 1000)
+    } catch {
+      notify('백업을 불러오지 못했어요. 지금 데이터는 그대로예요.', false)
+      setPending(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={handleExport} className="btn-secondary">
+          <Download className="h-4 w-4" />
+          백업 파일 저장
+        </button>
+        <button type="button" onClick={() => fileRef.current?.click()} className="btn-secondary">
+          <Upload className="h-4 w-4" />
+          백업 불러오기
+        </button>
+        <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={handleFile} />
+      </div>
+
+      {message && (
+        <p role="status" className={`text-sm ${message.ok ? 'text-success' : 'text-danger'}`}>
+          {message.text}
+        </p>
+      )}
+
+      <Modal
+        open={Boolean(pending)}
+        onClose={() => setPending(null)}
+        title="백업을 불러올까요?"
+        size="sm"
+        footer={
+          <>
+            <button type="button" onClick={() => setPending(null)} className="btn-secondary flex-1">
+              취소
+            </button>
+            <button type="button" onClick={confirmImport} disabled={busy} className="btn-primary flex-1">
+              {busy ? '불러오는 중…' : '불러오기'}
+            </button>
+          </>
+        }
+      >
+        {pending && (
+          <div className="space-y-3 text-sm text-ink-mid">
+            <p>
+              백업 파일의 일기 <strong className="text-ink">{pending.data.journals.length}편</strong>으로 지금 데이터를 모두
+              바꿔요. 지금 기기에만 있는 일기는 사라져요.
+            </p>
+            {pending.warning && <p className="rounded-lg bg-danger-soft px-3 py-2 text-danger">{pending.warning}</p>}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

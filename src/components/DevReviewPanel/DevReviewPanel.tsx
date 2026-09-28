@@ -1,453 +1,108 @@
+// 개발 모드 전용 점검 패널 (npm run dev에서만 로드됨)
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { missions } from '../../data/missions'
-import {
-  setTodayMission,
-  setCooldownList,
-  saveJournal,
-  clearAllData,
-  type JournalEntry,
-} from '../../db/indexedDB'
-import { getLocalDateString } from '../../hooks/useTodayMission'
+import { missions, journalTypeOf, type Mission } from '../../data/missions'
+import { clearAllData, saveJournal, setCooldownList, setTodayMission, type JournalEntry } from '../../db/indexedDB'
+import { addDays, getEffectiveDateString } from '../../lib/date'
+import { drawExtraData } from '../../lib/draw'
+import { joinAnswers, toAnswers } from '../../lib/prompts'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function offsetDate(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+const SAMPLES: Record<string, string> = {
+  'lang-2': '오늘 하루가 있었다. 피곤함이 있다. 기분이 좋지 않은 상태이다. 모든 것이 뒤엉켜 있다.',
+  'lang-6': '가을이 왔다. 나는 걸었다. 바람이 불었다.',
+  'lang-8': '가방 나무 다리 라면 마음 바다',
+  'lang-9': '오늘은, 날씨가, 참으로 좋았다. 그래서 산책을 했다.',
+  'creative-2': '뭐였을까? 그냥 피곤했다. 정말?',
+  'creative-6': '엄마: "밥 먹었니?"\n나: "아직…"\n그리고 나는 부엌으로 갔다.',
+  'time-3': '오늘 하루는 아침부터 저녁까지 정말 많은 일들이 있었고 그 모든 순간들이 머릿속을 가득 채우고 있어서 무척이나 복잡한 마음이다. 그래도 괜찮다.',
 }
 
-const SAMPLE_LANG2_TEXT = '오늘 하루가 있었다. 피곤함이 있다. 기분이 좋지 않은 상태이다. 모든 것이 뒤엉켜 있다.'
-const SAMPLE_TIME3_TEXT = '오늘 하루는 아침부터 저녁까지 정말 많은 일들이 있었고 그 모든 순간들이 머릿속을 가득 채우고 있어서 무척이나 복잡한 마음이다.'
-const SAMPLE_LANG8_TEXT = '나는 가고 싶다. 달리기를 라디오를 마음껏 바라보며 아침부터.'
-const SAMPLE_TIME8_TEXT = '오늘 하루는 아침부터 유독 바빴다. 출근길에 놓친 버스 한 대가 이미 하루의 시작을 알렸다. 점심은 편의점 도시락으로 빠르게 해결했고, 오후에는 회의가 두 개나 있었다. 그래도 퇴근 후 집에 돌아오면 따뜻한 국물 한 그릇이 기다리고 있다는 생각 하나로 버텼다. 오늘도 수고했다.'
-
-// ─── Component ────────────────────────────────────────────────────────────────
+function dummyEntry(m: Mission, date: string, status: JournalEntry['status']): JournalEntry {
+  const at = new Date(`${date}T21:00:00`).toISOString()
+  const answers = m.prompts ? toAnswers(m.prompts, m.prompts.map((p) => `${p.label}에 대한 샘플 답`)) : null
+  return {
+    id: date,
+    missionId: m.id,
+    type: journalTypeOf(m),
+    content: m.editorType === 'trash' || m.editorType === 'canvas' ? null : answers ? joinAnswers(answers) : `${m.title} 샘플 일기입니다.`,
+    status,
+    createdAt: at,
+    completedAt: status === 'completed' ? at : null,
+    extraData: answers ? { answers } : drawExtraData(m),
+  }
+}
 
 export default function DevReviewPanel() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
-  const [selectedMissionId, setSelectedMissionId] = useState(missions[0].id)
-  const [confirmReset, setConfirmReset] = useState(false)
+  const [missionId, setMissionId] = useState(missions[0].id)
+  const [toast, setToast] = useState<string | null>(null)
+  const today = getEffectiveDateString()
 
-  function showToast(msg: string, ok: boolean) {
-    setToast({ msg, ok })
-    setTimeout(() => setToast(null), 4000)
-  }
-
-  async function run(fn: () => Promise<void>, label: string) {
+  const run = async (label: string, fn: () => Promise<void>) => {
     try {
       await fn()
-      showToast(`${label} ✅`, true)
+      setToast(`${label} 완료`)
     } catch (e) {
-      showToast(`실패: ${e}`, false)
+      setToast(`실패: ${String(e)}`)
     }
+    setTimeout(() => setToast(null), 3000)
   }
 
-  // ─── Slot machine actions ──────────────────────────────────────────────────
+  const selected = missions.find((m) => m.id === missionId)!
 
-  async function forceSpin() {
-    await setTodayMission({ key: 'todayMission', date: '1970-01-01', missionId: missions[0].id })
-    navigate('/')
-    window.location.reload()
+  const setToday = async (m: Mission) => {
+    await setTodayMission({ key: 'todayMission', date: today, missionId: m.id, extraData: drawExtraData(m) })
   }
 
-  async function forceResult() {
-    const today = getLocalDateString()
-    const mission = missions.find((m) => m.id === selectedMissionId)!
-    let extraData: Record<string, unknown> | undefined
-    if (mission.id === 'lang-3') extraData = { bannedVowel: 'ㅏ' }
-    if (mission.id === 'lang-4') extraData = { allowedVowel: 'ㅗ' }
-    await setTodayMission({ key: 'todayMission', date: today, missionId: selectedMissionId, extraData })
-    navigate('/')
-    window.location.reload()
-  }
+  const actions: Array<[string, () => Promise<void>]> = [
+    ['선택한 미션을 오늘 미션으로', async () => { await setToday(selected); navigate('/'); location.reload() }],
+    ['선택한 미션으로 바로 쓰기', async () => { await setToday(selected); navigate('/write'); setOpen(false) }],
+    [
+      '샘플 글 넣고 열기 (규칙 표시 확인)',
+      async () => {
+        await setToday(selected)
+        const e = dummyEntry(selected, today, 'draft')
+        if (SAMPLES[selected.id]) e.content = SAMPLES[selected.id]
+        await saveJournal(e)
+        navigate('/write')
+        setOpen(false)
+      },
+    ],
+    ['오늘 미션 지우고 다시 뽑기', async () => { await setTodayMission({ key: 'todayMission', date: '1970-01-01', missionId: missions[0].id }); navigate('/'); location.reload() }],
+    ['지난 30일 완료 기록 만들기', async () => { for (let i = 1; i <= 30; i++) await saveJournal(dummyEntry(missions[(i * 7) % missions.length], addDays(today, -i), 'completed')) }],
+    ['3일 전 임시저장 만들기', async () => { await saveJournal(dummyEntry(missions[3], addDays(today, -3), 'draft')) }],
+    ['쉬는 미션 목록 비우기', async () => { await setCooldownList([]) }],
+    ['⚠ 모든 데이터 지우기', async () => { if (confirm('정말 모두 지울까요?')) { await clearAllData(); navigate('/'); location.reload() } }],
+  ]
 
-  // ─── Editor shortcuts ─────────────────────────────────────────────────────
-
-  function openEditor(missionId: string) {
-    navigate(`/write?missionId=${missionId}`)
-  }
-
-  async function openWithPrefilledText(missionId: string, text: string, extraData?: Record<string, unknown>) {
-    const today = getLocalDateString()
-    // Set the todayMission so Write.tsx picks up extraData
-    await setTodayMission({ key: 'todayMission', date: today, missionId, extraData })
-    // Save a draft with the pre-filled text
-    const journal: JournalEntry = {
-      id: today,
-      missionId,
-      type: 'text',
-      content: text,
-      status: 'draft',
-      createdAt: new Date().toISOString(),
-      completedAt: null,
-    }
-    await saveJournal(journal)
-    navigate(`/write?missionId=${missionId}`)
-  }
-
-  async function openLang3WithBannedVowel() {
-    const today = getLocalDateString()
-    const bannedVowel = 'ㅏ'
-    await setTodayMission({ key: 'todayMission', date: today, missionId: 'lang-3', extraData: { bannedVowel } })
-    navigate('/write?missionId=lang-3')
-  }
-
-  // ─── Data actions ─────────────────────────────────────────────────────────
-
-  async function addDummyCompleted() {
-    const date = offsetDate(-1)
-    const journal: JournalEntry = {
-      id: date,
-      missionId: 'lang-1',
-      type: 'text',
-      content: '어제의 테스트 일기입니다. 더미 완료 항목입니다.',
-      status: 'completed',
-      createdAt: new Date(new Date().getTime() - 86400000).toISOString(),
-      completedAt: new Date(new Date().getTime() - 86400000).toISOString(),
-    }
-    await saveJournal(journal)
-  }
-
-  async function addDummyDraft() {
-    const date = offsetDate(-3)
-    const journal: JournalEntry = {
-      id: date,
-      missionId: 'view-1',
-      type: 'text',
-      content: '3일 전 임시저장 더미 항목입니다.',
-      status: 'draft',
-      createdAt: new Date(new Date().getTime() - 3 * 86400000).toISOString(),
-      completedAt: null,
-    }
-    await saveJournal(journal)
-  }
-
-  async function verifyArchiveRedirect() {
-    const today = getLocalDateString()
-    const journal: JournalEntry = {
-      id: today,
-      missionId: missions[0].id,
-      type: 'text',
-      content: '오늘 완료된 항목 테스트',
-      status: 'completed',
-      createdAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    }
-    await saveJournal(journal)
-    navigate('/write')
-  }
-
-  async function fillCycle() {
-    for (let i = 0; i < missions.length; i++) {
-      const date = offsetDate(-(i + 1))
-      const m = missions[i]
-      const journal: JournalEntry = {
-        id: date,
-        missionId: m.id,
-        type: m.editorType === 'canvas' ? 'canvas' : m.editorType === 'trash' ? 'trash' : 'text',
-        content: `더미 일기 #${i + 1} — ${m.title}`,
-        status: 'completed',
-        createdAt: new Date(new Date().getTime() - (i + 1) * 86400000).toISOString(),
-        completedAt: new Date(new Date().getTime() - (i + 1) * 86400000).toISOString(),
-      }
-      await saveJournal(journal)
-    }
-  }
-
-  async function insertSampleStatsData() {
-    // Insert 10 varied completed entries across categories
-    const picks = [
-      missions.find((m) => m.category === 'lang')!,
-      missions.find((m) => m.category === 'view')!,
-      missions.find((m) => m.category === 'time')!,
-      missions.find((m) => m.category === 'visual')!,
-      missions.find((m) => m.category === 'creative')!,
-      missions.filter((m) => m.category === 'lang')[1],
-      missions.filter((m) => m.category === 'time')[1],
-      missions.filter((m) => m.category === 'visual')[1],
-      missions.filter((m) => m.category === 'creative')[1],
-      missions.filter((m) => m.category === 'view')[1],
-    ].filter(Boolean)
-
-    for (let i = 0; i < picks.length; i++) {
-      const m = picks[i]
-      const date = offsetDate(-(i + 2))
-      const journal: JournalEntry = {
-        id: date,
-        missionId: m.id,
-        type: m.editorType === 'canvas' ? 'canvas' : 'text',
-        content: `통계 페이지 샘플 일기 ${i + 1}`,
-        status: 'completed',
-        createdAt: new Date(new Date().getTime() - (i + 2) * 86400000).toISOString(),
-        completedAt: new Date(new Date().getTime() - (i + 2) * 86400000).toISOString(),
-      }
-      await saveJournal(journal)
-    }
-    navigate('/stats')
-  }
-
-  async function resetAll() {
-    await clearAllData()
-    setConfirmReset(false)
-    navigate('/')
-    window.location.reload()
-  }
-
-  // ─── Render ───────────────────────────────────────────────────────────────
+  const box: React.CSSProperties = { background: '#1f1c19', color: '#ece5da', border: '1px solid #3c3732', borderRadius: 10, fontSize: 12 }
 
   return (
     <>
-      {/* Trigger button */}
-      <button
-        onClick={() => setOpen(true)}
-        style={{
-          position: 'fixed',
-          bottom: '1rem',
-          right: '1rem',
-          zIndex: 9999,
-          background: '#161b22',
-          border: '1px solid #30363d',
-          color: '#8b949e',
-          borderRadius: 8,
-          padding: '6px 10px',
-          fontSize: 11,
-          cursor: 'pointer',
-          fontFamily: 'monospace',
-        }}
-      >
-        ⚙ Review Mode
+      <button type="button" onClick={() => setOpen(true)} style={{ ...box, position: 'fixed', right: 12, bottom: 84, zIndex: 9999, padding: '6px 10px', fontFamily: 'monospace' }}>
+        DEV
       </button>
-
-      {/* Modal */}
       {open && (
-        <div
-          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.75)',
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'flex-end',
-            padding: '1rem',
-            overflowY: 'auto',
-          }}
-        >
-          <div
-            style={{
-              background: '#0d1117',
-              border: '1px solid #30363d',
-              borderRadius: 12,
-              width: 360,
-              maxHeight: 'calc(100vh - 2rem)',
-              overflowY: 'auto',
-              padding: '1rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-            }}
-          >
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ color: '#e6edf3', fontWeight: 700, fontSize: 14 }}>⚙ Dev Review Panel</span>
-              <button
-                onClick={() => setOpen(false)}
-                style={{ color: '#8b949e', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
-              >
-                ×
+        <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', padding: 12 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...box, width: 340, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', padding: 12, display: 'grid', gap: 8 }}>
+            <strong>개발용 점검 패널</strong>
+            {toast && <div style={{ color: '#8fbf85' }}>{toast}</div>}
+            <select value={missionId} onChange={(e) => setMissionId(e.target.value)} style={{ ...box, padding: 6, fontSize: 12 }}>
+              {missions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id} · {m.title}
+                </option>
+              ))}
+            </select>
+            {actions.map(([label, fn]) => (
+              <button key={label} type="button" onClick={() => run(label, fn)} style={{ ...box, textAlign: 'left', padding: '6px 8px', cursor: 'pointer' }}>
+                {label}
               </button>
-            </div>
-
-            {/* Toast */}
-            {toast && (
-              <div
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  background: toast.ok ? '#1a2e1a' : '#2e1a1a',
-                  border: `1px solid ${toast.ok ? '#2ea043' : '#da3633'}`,
-                  color: toast.ok ? '#3fb950' : '#f85149',
-                }}
-              >
-                {toast.msg}
-              </div>
-            )}
-
-            <PanelSection title="🎰 Slot Machine">
-              <ActionButton label="Force spin animation" onClick={() => run(forceSpin, 'Force spin')} />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <select
-                  value={selectedMissionId}
-                  onChange={(e) => setSelectedMissionId(e.target.value)}
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    maxWidth: 160,
-                    background: '#161b22',
-                    border: '1px solid #30363d',
-                    color: '#e6edf3',
-                    borderRadius: 6,
-                    padding: '4px 6px',
-                    fontSize: 11,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {missions.map((m) => (
-                    <option key={m.id} value={m.id}>{m.id} — {m.title}</option>
-                  ))}
-                </select>
-                <ActionButton label="Force result" onClick={() => run(forceResult, 'Force result')} />
-              </div>
-            </PanelSection>
-
-            <PanelSection title="✏️ Editor Types">
-              <ActionButton label="text editor (lang-1)" onClick={() => { openEditor('lang-1'); setOpen(false) }} />
-              <ActionButton label="timed-text + backspace disabled (time-1)" onClick={() => { openEditor('time-1'); setOpen(false) }} />
-              <ActionButton label="timed-text + countdown 30s (time-4)" onClick={() => { openEditor('time-4'); setOpen(false) }} />
-              <ActionButton label="canvas editor (visual-1)" onClick={() => { openEditor('visual-1'); setOpen(false) }} />
-              <ActionButton label="emoji-only editor (visual-2)" onClick={() => { openEditor('visual-2'); setOpen(false) }} />
-              <ActionButton label="trash editor + shred (creative-8)" onClick={() => { openEditor('creative-8'); setOpen(false) }} />
-              <ActionButton label="blackout editor (time-5)" onClick={() => { openEditor('time-5'); setOpen(false) }} />
-              <ActionButton label="emotion temperature canvas (visual-5)" onClick={() => { openEditor('visual-5'); setOpen(false) }} />
-            </PanelSection>
-
-            <PanelSection title="🔍 Soft Highlighting">
-              <ActionButton
-                label="lang-2: pre-fill 이다/있다/없다 → verify red"
-                onClick={() => run(() => openWithPrefilledText('lang-2', SAMPLE_LANG2_TEXT).then(() => setOpen(false)), 'lang-2 prefill')}
-              />
-              <ActionButton
-                label="lang-3: bannedVowel=ㅏ → verify highlight"
-                onClick={() => run(() => openLang3WithBannedVowel().then(() => setOpen(false)), 'lang-3 bannedVowel')}
-              />
-              <ActionButton
-                label="time-3: pre-fill 110+ chars → verify overflow"
-                onClick={() => run(() => openWithPrefilledText('time-3', SAMPLE_TIME3_TEXT).then(() => setOpen(false)), 'time-3 prefill')}
-              />
-              <ActionButton
-                label="lang-8: pre-fill word consonant order → verify red on 나는"
-                onClick={() => run(() => openWithPrefilledText('lang-8', SAMPLE_LANG8_TEXT).then(() => setOpen(false)), 'lang-8 prefill')}
-              />
-              <ActionButton
-                label="time-8: pre-fill ~280 chars → verify under-300 indicator"
-                onClick={() => run(() => openWithPrefilledText('time-8', SAMPLE_TIME8_TEXT).then(() => setOpen(false)), 'time-8 prefill')}
-              />
-            </PanelSection>
-
-            <PanelSection title="🗄️ Data & Navigation">
-              <ActionButton
-                label="Add dummy completed entry (yesterday)"
-                onClick={() => run(addDummyCompleted, 'Add completed')}
-              />
-              <ActionButton
-                label="Add dummy draft entry (3 days ago)"
-                onClick={() => run(addDummyDraft, 'Add draft')}
-              />
-              <ActionButton
-                label="Verify /archive redirect (complete today + go to /write)"
-                onClick={() => run(verifyArchiveRedirect, 'Archive redirect')}
-              />
-              <ActionButton
-                label={`Fill cycle: ${missions.length} completed entries`}
-                onClick={() => run(fillCycle, 'Fill cycle')}
-              />
-              <ActionButton
-                label="Go to /stats with sample data"
-                onClick={() => run(insertSampleStatsData, 'Sample stats data')}
-              />
-              <div>
-                {!confirmReset ? (
-                  <ActionButton
-                    label="⚠️ Reset ALL data"
-                    danger
-                    onClick={() => setConfirmReset(true)}
-                  />
-                ) : (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <ActionButton label="Cancel" onClick={() => setConfirmReset(false)} />
-                    <ActionButton
-                      label="CONFIRM RESET"
-                      danger
-                      onClick={() => run(resetAll, 'Reset all')}
-                    />
-                  </div>
-                )}
-              </div>
-            </PanelSection>
-
-            {/* Reset cooldowns helper */}
-            <PanelSection title="🔄 Cooldown">
-              <ActionButton
-                label="Clear cooldown list"
-                onClick={() => run(async () => { await setCooldownList([]) }, 'Clear cooldowns')}
-              />
-            </PanelSection>
+            ))}
           </div>
         </div>
       )}
     </>
-  )
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        background: '#161b22',
-        border: '1px solid #21262d',
-        borderRadius: 8,
-        padding: '8px 10px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-      }}
-    >
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#58a6ff', marginBottom: 4 }}>{title}</div>
-      {children}
-    </div>
-  )
-}
-
-function ActionButton({
-  label,
-  onClick,
-  danger,
-}: {
-  label: string
-  onClick: () => void
-  danger?: boolean
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '100%',
-        textAlign: 'left',
-        padding: '4px 8px',
-        borderRadius: 4,
-        fontSize: 11,
-        cursor: 'pointer',
-        background: danger ? '#2e1a1a' : '#0d1117',
-        border: `1px solid ${danger ? '#da3633' : '#21262d'}`,
-        color: danger ? '#f85149' : '#c9d1d9',
-        transition: 'opacity 0.15s',
-      }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.75' }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}
-    >
-      {label}
-    </button>
   )
 }

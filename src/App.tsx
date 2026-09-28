@@ -1,22 +1,16 @@
-import { lazy, Suspense } from 'react'
-import { HashRouter, Routes, Route, Outlet } from 'react-router-dom'
-import { ThemeProvider } from './contexts/ThemeContext'
+import { lazy, Suspense, useEffect } from 'react'
+import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { ThemeProvider } from './theme/ThemeProvider'
 import Layout from './components/shared/Layout'
-import Home    from './pages/Home'
-import Write   from './pages/Write'
+import Home from './pages/Home'
+import Write from './pages/Write'
 import Archive from './pages/Archive'
-import Drafts  from './pages/Drafts'
-import Stats   from './pages/Stats'
+import Drafts from './pages/Drafts'
+import Stats from './pages/Stats'
 
-// DevReviewPanel은 개발 환경에서만 로드.
-// import.meta.env.DEV는 빌드 타임 상수로 치환되므로 프로덕션 번들에서는
-// lazy 호출 자체가 제거되고 DevReviewPanel 코드는 번들에 포함되지 않는다.
-const DevReviewPanel = import.meta.env.DEV
-  ? lazy(() => import('./components/DevReviewPanel/DevReviewPanel'))
-  : null
+// 개발 모드에서만 불러오는 점검 패널. 프로덕션 번들에는 들어가지 않는다.
+const DevReviewPanel = import.meta.env.DEV ? lazy(() => import('./components/DevReviewPanel/DevReviewPanel')) : null
 
-// Layout이 자식 라우트를 렌더하는 래퍼.
-// Layout의 기존 children 기반 API와 공존시키기 위해 children 대신 <Outlet />을 넘긴다.
 function LayoutOutlet() {
   return (
     <Layout>
@@ -25,25 +19,34 @@ function LayoutOutlet() {
   )
 }
 
+/** 화면을 옮길 때마다 맨 위에서 시작 (기록의 날짜별 모달 열기/닫기는 제외) */
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  const section = pathname.split('/')[1]
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [section])
+  return null
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <HashRouter>
+        <ScrollToTop />
         <Routes>
-          {/* Layout을 쓰는 페이지 — 중첩 라우트로 명시 */}
           <Route element={<LayoutOutlet />}>
             <Route index element={<Home />} />
             <Route path="archive" element={<Archive />}>
-              {/* /archive/:date — 특정 엔트리 딥링크. Archive 컴포넌트가 URL 파라미터를
-                  읽어 해당 엔트리 모달을 자동으로 연다. */}
+              {/* /archive/2026-09-28 — 해당 날짜의 일기를 바로 연다 */}
               <Route path=":date" element={null} />
             </Route>
             <Route path="drafts" element={<Drafts />} />
             <Route path="stats" element={<Stats />} />
           </Route>
-
-          {/* Layout을 쓰지 않는 페이지 — 집필 집중 화면 */}
+          {/* 글 쓰는 화면은 탭바 없이 집중 모드로 */}
           <Route path="write" element={<Write />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
 
         {DevReviewPanel && (
