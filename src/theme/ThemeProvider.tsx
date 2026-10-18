@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ThemeContext, THEME_COLORS, resolveInitialTheme, type Theme } from './theme'
+import { ThemeContext, THEME_COLORS, THEME_KEY, resolveInitialTheme, type Theme } from './theme'
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(resolveInitialTheme)
@@ -7,7 +7,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     try {
-      localStorage.setItem('theme', theme)
+      localStorage.setItem(THEME_KEY, theme)
     } catch {
       // 사생활 보호 모드 등에서 저장이 막혀도 동작은 계속한다
     }
