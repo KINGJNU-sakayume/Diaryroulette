@@ -7,6 +7,7 @@ import Write from './pages/Write'
 import Archive from './pages/Archive'
 import Drafts from './pages/Drafts'
 import Stats from './pages/Stats'
+import { LifeHubAgent } from './components/LifeHub/LifeHub'
 
 // 개발 모드에서만 불러오는 점검 패널. 프로덕션 번들에는 들어가지 않는다.
 const DevReviewPanel = import.meta.env.DEV ? lazy(() => import('./components/DevReviewPanel/DevReviewPanel')) : null
@@ -34,6 +35,7 @@ export default function App() {
     <ThemeProvider>
       <HashRouter>
         <ScrollToTop />
+        <LifeHubAgent />
         <Routes>
           <Route element={<LayoutOutlet />}>
             <Route index element={<Home />} />

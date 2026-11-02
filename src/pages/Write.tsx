@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { APPLIED_EVENT } from '../integration/events'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check, CircleAlert, Scissors } from 'lucide-react'
 import { getMission, journalTypeOf, type Mission } from '../data/missions'
@@ -55,6 +56,7 @@ export default function Write() {
   const [error, setError] = useState<string | null>(null)
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
   const [done, setDone] = useState<{ entry: JournalEntry; streak: number } | null>(null)
+  const [reload, setReload] = useState(0)
 
   // 자동저장은 항상 "지금" 값을 봐야 해서 ref로도 들고 있는다
   const missionRef = useRef<Mission | null>(null)
@@ -68,6 +70,14 @@ export default function Write() {
   const draftExistsRef = useRef(false)
   const dirtyRef = useRef(false)
   const completedRef = useRef(false)
+
+  // Opened from a Claude card before Life Hub's mission was saved: load again once it is (only while empty).
+  useEffect(() => {
+    if (loadState !== 'missing') return
+    const again = () => setReload((n) => n + 1)
+    window.addEventListener(APPLIED_EVENT, again)
+    return () => window.removeEventListener(APPLIED_EVENT, again)
+  }, [loadState])
 
   // ── 불러오기 ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -120,7 +130,7 @@ export default function Write() {
     return () => {
       alive = false
     }
-  }, [targetDate, missionParam, navigate])
+  }, [targetDate, missionParam, navigate, reload])
 
   // ── 저장 ────────────────────────────────────────────────────────────────────
   /** 지금 화면의 내용을 저장 가능한 형태로 모은다 */

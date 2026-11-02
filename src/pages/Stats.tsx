@@ -7,6 +7,7 @@ import { CATEGORIES, CATEGORY_ORDER, type MissionCategory } from '../data/catego
 import { addDays, formatDateShort, getEffectiveDateString, parseDateId } from '../lib/date'
 import { computeStreaks } from '../lib/streak'
 import { exportToJSON, type ExportData } from '../utils/exportData'
+import { LifeHubSettings } from '../components/LifeHub/LifeHub'
 import { importFromJSON, validateExportData } from '../utils/importData'
 import Loading from '../components/shared/Loading'
 import Modal from '../components/shared/Modal'
@@ -137,6 +138,10 @@ export default function Stats() {
             )
           })}
         </div>
+      </Section>
+
+      <Section title="Life Hub" description="Claude 대화에서 오늘의 미션 룰렛을 돌리고, 고른 미션을 여기로 가져와요. 미션 목록과 오늘 상태(쉬는 미션·오늘 미션)만 공유하고 일기 내용은 보내지 않아요.">
+        <LifeHubSettings />
       </Section>
 
       <Section title="백업" description="일기는 이 기기의 브라우저에만 저장돼요. 기기를 바꾸거나 브라우저 데이터를 지우기 전에 파일로 백업해 두세요.">
