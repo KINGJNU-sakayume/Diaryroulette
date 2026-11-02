@@ -4,6 +4,8 @@ import { getTodayMission, setTodayMission, type TodayMissionRecord } from '../db
 import { useCooldown } from './useCooldown'
 import { drawExtraData } from '../lib/draw'
 import { getEffectiveDateString } from '../lib/date'
+import { APPLIED_EVENT } from '../integration/events'
+import { requestLifeHubSync } from '../integration/lifehubStore'
 
 // 예전 import 경로 호환
 export { getLocalDateString, getEffectiveDateString } from '../lib/date'
@@ -13,6 +15,14 @@ export function useTodayMission() {
   const { getAvailableMissions, addToCooldown, loading: cooldownLoading } = useCooldown()
   const [todayRecord, setTodayRecord] = useState<TodayMissionRecord | null>(null)
   const [loading, setLoading] = useState(true)
+  const [reload, setReload] = useState(0)
+
+  // A mission chosen through Life Hub (or in another tab of this app) shows up without a restart.
+  useEffect(() => {
+    const again = () => setReload((n) => n + 1)
+    window.addEventListener(APPLIED_EVENT, again)
+    return () => window.removeEventListener(APPLIED_EVENT, again)
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -27,7 +37,7 @@ export function useTodayMission() {
     return () => {
       alive = false
     }
-  }, [today])
+  }, [today, reload])
 
   const drawMission = useCallback(async (): Promise<TodayMissionRecord> => {
     const available = getAvailableMissions()
@@ -41,6 +51,8 @@ export function useTodayMission() {
     await setTodayMission(record)
     await addToCooldown(mission.id)
     setTodayRecord(record)
+    // Life Hub learns that today's mission is taken (a Claude card then shows it instead of drawing).
+    requestLifeHubSync()
     return record
   }, [today, getAvailableMissions, addToCooldown])
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { missions, type Mission } from '../data/missions'
+import { APPLIED_EVENT } from '../integration/events'
 import {
   getCooldownList,
   setCooldownList as persistCooldownList,
@@ -30,6 +31,13 @@ export function availableMissions(cooldowns: CooldownEntry[], now: Date = new Da
 export function useCooldown() {
   const [cooldownList, setCooldownList] = useState<CooldownEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    const again = () => setReload((n) => n + 1)
+    window.addEventListener(APPLIED_EVENT, again)
+    return () => window.removeEventListener(APPLIED_EVENT, again)
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -46,7 +54,7 @@ export function useCooldown() {
     return () => {
       alive = false
     }
-  }, [])
+  }, [reload])
 
   const getAvailableMissions = useCallback(() => availableMissions(cooldownList), [cooldownList])
 

@@ -9,6 +9,7 @@ import { getAllJournals, type JournalEntry } from '../db/indexedDB'
 import { getMission } from '../data/missions'
 import { formatDateLong } from '../lib/date'
 import { computeStreaks } from '../lib/streak'
+import { LifeHubTodayBanner } from '../components/LifeHub/LifeHub'
 
 interface Summary {
   todayEntry: JournalEntry | null
@@ -96,6 +97,8 @@ export default function Home() {
       <p className="text-sm text-muted">{formatDateLong(today)}</p>
       <h1 className="mt-1 font-serif text-[26px] font-bold leading-snug text-ink">{heading}</h1>
       {sub && <p className="mt-2 text-[15px] leading-relaxed text-ink-mid">{sub}</p>}
+
+      {!spinning && <LifeHubTodayBanner today={today} hasMission={!!mission} />}
 
       {showMachine && (
         <div className="mt-6 flex flex-col items-center gap-4">
