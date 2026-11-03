@@ -292,16 +292,16 @@ export function stateRefs(restingIds: string[], today: { date: string; missionId
   return out
 }
 
-async function putRefs(kind: string, revision: number, items: RefItem[], deps: Deps): Promise<boolean> {
+/** 'stored', 'newer' (409: Life Hub already holds a newer revision of this kind) or 'failed'. */
+async function putRefs(kind: string, revision: number, items: RefItem[], deps: Deps): Promise<'stored' | 'newer' | 'failed'> {
   const response = await api(deps, 'PUT', '/refs/' + kind, { revision, items })
-  // 409: Life Hub already holds a newer list (e.g. from another device).
-  return response.ok || response.status === 409
+  return response.ok ? 'stored' : response.status === 409 ? 'newer' : 'failed'
 }
 /** Sends the mission list once per revision and today's state whenever it changed. */
 export async function uploadRefs(state: RefItem[], deps: Deps): Promise<{ missions: boolean; state: boolean }> {
   const sent = { missions: false, state: false }
   if (deps.storage.getItem(MISSIONS_REF_KEY) !== String(MISSIONS_REF_REVISION) &&
-    (await putRefs('missions', MISSIONS_REF_REVISION, missionRefs(), deps))) {
+    (await putRefs('missions', MISSIONS_REF_REVISION, missionRefs(), deps)) !== 'failed') {
     deps.storage.setItem(MISSIONS_REF_KEY, String(MISSIONS_REF_REVISION))
     sent.missions = true
   }
@@ -309,7 +309,9 @@ export async function uploadRefs(state: RefItem[], deps: Deps): Promise<{ missio
   const last = readJson<{ revision: number; body: string }>(deps.storage, STATE_REF_KEY)
   if (last?.body !== body) {
     const revision = Math.max(deps.now(), (last?.revision ?? 0) + 1)
-    if (await putRefs('state', revision, state, deps)) {
+    // A 409 for today's state means another device (or a clock ahead of ours) sent a later revision: not
+    // recorded as sent, so the next sync sends this state again with a later time.
+    if ((await putRefs('state', revision, state, deps)) === 'stored') {
       deps.storage.setItem(STATE_REF_KEY, JSON.stringify({ revision, body }))
       sent.state = true
     }

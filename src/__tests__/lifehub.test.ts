@@ -181,3 +181,32 @@ describe('sync and reference lists', () => {
     expect(autoApplyEnabled(d)).toBe(false)
   })
 })
+
+describe('reference lists after a 409', () => {
+  it("a 409 for today's state is not recorded as sent; the next sync sends it again, missions stay done", async () => {
+    const statuses: Array<[string, number]> = []
+    let answer = 409
+    const f = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/oauth/token') return new Response(JSON.stringify({ access_token: 'at', refresh_token: 'rt', token_type: 'bearer', expires_in: 3600 }))
+      const kind = url.pathname.split('/').pop()!
+      const revision = JSON.parse(String(init?.body)).revision as number
+      const status = kind === 'missions' ? 409 : answer
+      statuses.push([kind, revision])
+      return new Response('{}', { status })
+    }) as typeof fetch
+    const t = { now: Date.parse('2026-11-02T03:00:00Z') }
+    const d = deps(f, t)
+    const url = new URL(await beginConnect(d))
+    await completeConnect(`?code=c&state=${url.searchParams.get('state')}`, d)
+    const state = stateRefs([], { date: TODAY, missionId: 'lang-1' })
+    expect(await uploadRefs(state, d)).toEqual({ missions: true, state: false })
+    t.now += 60_000
+    answer = 200
+    expect(await uploadRefs(state, d)).toEqual({ missions: false, state: true })
+    const sent = statuses.filter(([k]) => k === 'state').map(([, r]) => r)
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toBeGreaterThan(sent[0])
+    expect(await uploadRefs(state, d)).toEqual({ missions: false, state: false })
+  })
+})
