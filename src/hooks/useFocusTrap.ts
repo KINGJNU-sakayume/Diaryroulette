@@ -32,6 +32,9 @@ export function useFocusTrap<T extends HTMLElement>(
     })
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 다른 모달(이 모달 위에 열린 확인 창 등)에 포커스가 있으면 그쪽이 처리한다
+      const focused = document.activeElement
+      if (focused && !containerRef.current?.contains(focused) && focused.closest('[aria-modal="true"]')) return
       if (e.key === 'Escape' && onCloseRef.current) {
         e.preventDefault()
         onCloseRef.current()

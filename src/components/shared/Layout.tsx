@@ -1,10 +1,22 @@
+import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import { Settings } from 'lucide-react'
+import { SETTINGS_EVENT, useLifeHub } from '../../integration/lifehubStore'
+import SettingsSheet from '../Settings/SettingsSheet'
 import BottomTabBar from './BottomTabBar'
 import Logo from './Logo'
 import ThemeToggle from './ThemeToggle'
 import { NAV_ITEMS } from './navItems'
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const attention = useLifeHub().reconnect
+  useEffect(() => {
+    const open = () => setSettingsOpen(true)
+    window.addEventListener(SETTINGS_EVENT, open)
+    return () => window.removeEventListener(SETTINGS_EVENT, open)
+  }, [])
+  const settingsLabel = attention ? '설정 (확인 필요)' : '설정'
   return (
     <div className="flex min-h-screen flex-col bg-page">
       <header className="safe-top sticky top-0 z-30 border-b border-line" style={{ background: 'var(--color-nav)' }}>
@@ -31,12 +43,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="icon-btn relative"
+            aria-label={settingsLabel}
+            title={settingsLabel}
+          >
+            <Settings className="h-[18px] w-[18px]" />
+            {attention && <span data-attention className="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" aria-hidden="true" />}
+          </button>
         </div>
       </header>
 
       <main className="pb-tab-bar flex-1 md:pb-10">{children}</main>
 
       <BottomTabBar />
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

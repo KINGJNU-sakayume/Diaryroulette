@@ -4,10 +4,10 @@ import { getMission } from '../../data/missions'
 import { getEffectiveDateString } from '../../lib/date'
 import {
   APP_URL, autoApplyEnabled, beginConnect, browserDeps, completeConnect, connectAvailable, disconnect, isAuthCallback,
-  isConnected, LifeHubError, rejectLocally, rememberReceipt, setAutoApply, sync,
+  isConnected, LifeHubError, needsReconnect, rejectLocally, rememberReceipt, setAutoApply, sync,
 } from '../../integration/lifehub'
 import { APPLIED_EVENT, applyProposals, chooseMission, dayRefs, readDay } from '../../integration/lifehubApply'
-import { getLifeHubState, requestLifeHubSync, setLifeHubState, SYNC_EVENT, useLifeHub, type Waiting } from '../../integration/lifehubStore'
+import { formatSyncTime, getLifeHubState, openSettings, requestLifeHubSync, setLifeHubState, SYNC_EVENT, useLifeHub, type Waiting } from '../../integration/lifehubStore'
 
 // The one-time code exchange must not run twice (React StrictMode runs effects twice in development).
 let callbackOnce: Promise<void> | null = null
@@ -32,7 +32,7 @@ export function LifeHubAgent() {
       setLifeHubState({ waiting: applied.waiting.filter((w) => open.has(w.proposal.key)), conflicts: settled.conflicts, lastSyncedAt: Date.now(), connected: true })
       if (applied.saved) setNotice(`오늘의 미션을 정했어요: 「${applied.saved.title}」 (Claude에서 뽑음)`)
     } catch (e) {
-      if (e instanceof LifeHubError && e.kind === 'not_connected') setLifeHubState({ connected: false, waiting: [] })
+      if (e instanceof LifeHubError && e.kind === 'not_connected') setLifeHubState({ connected: false, reconnect: needsReconnect(deps), waiting: [] })
       setLifeHubState({ error: e instanceof Error ? e.message : String(e) })
     } finally {
       setLifeHubState({ syncing: false })
@@ -47,12 +47,13 @@ export function LifeHubAgent() {
         callbackOnce ??= completeConnect(location.search, browserDeps())
         try {
           await callbackOnce
-          setLifeHubState({ connected: true, error: '' })
+          setLifeHubState({ connected: true, reconnect: false, error: '' })
           setNotice('Life Hub에 연결했어요.')
         } catch (e) {
           setLifeHubState({ error: e instanceof Error ? e.message : String(e) })
         }
-        history.replaceState(null, '', APP_URL + '#/stats')
+        history.replaceState(null, '', APP_URL + '#/')
+        openSettings()
       }
       await run()
     })()
@@ -131,7 +132,19 @@ export function LifeHubTodayBanner({ today, hasMission }: { today: string; hasMi
   )
 }
 
-/** Stats → Life Hub: connect, sync, auto-apply, disconnect. */
+function StatusLine({ tone, children }: { tone: 'ok' | 'warn'; children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-2 text-sm text-ink-mid">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${tone === 'ok' ? 'bg-success' : 'bg-danger'}`} aria-hidden="true" />
+      {children}
+    </p>
+  )
+}
+
+/**
+ * Settings → Life Hub (공통 규격). A: 연결 전, B: 연결됨, C: 확인 필요(Life Hub가 이 기기의 연결을 거부함).
+ * 이 앱은 제안만 받으므로 「고급」 영역이 없다.
+ */
 export function LifeHubSettings() {
   const hub = useLifeHub()
   const [auto, setAuto] = useState(() => autoApplyEnabled(browserDeps()))
@@ -144,30 +157,73 @@ export function LifeHubSettings() {
       setLifeHubState({ error: e instanceof Error ? e.message : String(e) })
     }
   }
+  function confirmDisconnect() {
+    if (!confirm('이 기기에서 Life Hub 연결을 해제할까요? 일기는 그대로 남아요.')) return
+    disconnect(browserDeps())
+    setLifeHubState({ connected: false, reconnect: false, waiting: [], error: '' })
+  }
+  const disconnectButton = (
+    <button type="button" className="btn-secondary flex-1 py-2" onClick={confirmDisconnect}>
+      <Unlink className="h-4 w-4" /> 연결 해제
+    </button>
+  )
+
+  // C: 확인 필요
+  if (!hub.connected && hub.reconnect)
+    return (
+      <div className="flex flex-col gap-3">
+        <StatusLine tone="warn">확인 필요</StatusLine>
+        <div className="rounded-lg bg-danger-soft px-3 py-3 text-sm text-danger">
+          <p>Life Hub 연결이 끊겼습니다. 다시 연결해 주세요. 이 기기의 기록은 그대로입니다.</p>
+          <button type="button" className="btn-primary mt-3 py-2" disabled={!canConnect} onClick={() => void connect()}>
+            <Link2 className="h-4 w-4" /> 다시 연결
+          </button>
+          {!canConnect && <p className="mt-2 text-xs">배포된 주소에서만 연결할 수 있어요.</p>}
+        </div>
+        <div className="flex">{disconnectButton}</div>
+      </div>
+    )
+
+  // A: 연결 전
   if (!hub.connected)
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
+        <div>
+          <p className="text-sm text-ink">Claude가 제안한 기록을 받습니다.</p>
+          <p className="mt-1 text-xs text-muted">미션 목록과 오늘 상태(쉬는 미션·오늘 미션)만 공유하고 일기 내용은 보내지 않아요.</p>
+        </div>
         <button type="button" className="btn-primary w-full py-2.5" disabled={!canConnect} onClick={() => void connect()}>
           <Link2 className="h-4 w-4" /> Life Hub 연결
         </button>
-        <p className="text-sm text-muted">
-          {canConnect ? 'Claude 대화에서 오늘의 미션 룰렛을 돌릴 수 있어요. 일기 내용은 보내지 않아요.' : '배포된 일기 룰렛 주소에서만 연결할 수 있어요.'}
-        </p>
+        {!canConnect && <p className="text-sm text-muted">배포된 주소에서만 연결할 수 있어요.</p>}
         {hub.error && <p role="alert" className="text-sm text-danger">{hub.error}</p>}
       </div>
     )
+
+  // B: 연결됨
+  const status = hub.syncing
+    ? '연결됨 · 동기화 중…'
+    : hub.error
+      ? '연결됨 · 잠시 뒤 다시 시도'
+      : hub.lastSyncedAt
+        ? `연결됨 · ${formatSyncTime(hub.lastSyncedAt)} 동기화`
+        : '연결됨 · 아직 동기화 전'
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-ink-mid">
-        Life Hub에 연결됨 · {hub.lastSyncedAt ? `마지막 동기화 ${new Date(hub.lastSyncedAt).toLocaleTimeString('ko-KR')}` : '아직 동기화하지 않았어요'}
-      </p>
-      <label className="flex items-center justify-between gap-3 text-sm text-ink">
-        <span>
-          Claude에서 승인된 항목 자동 반영
-          <small className="block text-muted">Claude 카드에서 「일기 쓰기」를 누른 미션을 앱을 열 때 오늘의 미션으로 정해요.</small>
-        </span>
+      <div>
+        <StatusLine tone="ok">{status}</StatusLine>
+        {hub.error && !hub.syncing && <p role="status" className="mt-1 text-xs text-muted">{hub.error}</p>}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" className="btn-secondary flex-1 py-2" disabled={hub.syncing} onClick={() => requestLifeHubSync(false)}>
+          <RefreshCw className="h-4 w-4" /> 지금 동기화
+        </button>
+        {disconnectButton}
+      </div>
+      <label className="flex items-start gap-2 text-sm text-ink">
         <input
           type="checkbox"
+          className="mt-1"
           checked={auto}
           onChange={(e) => {
             setAutoApply(browserDeps(), e.target.checked)
@@ -175,25 +231,13 @@ export function LifeHubSettings() {
             if (e.target.checked) requestLifeHubSync()
           }}
         />
+        <span>
+          Claude에서 승인한 기록은 바로 반영
+          <small className="block text-xs text-muted">Claude 카드에서 「일기 쓰기」를 누른 미션을 앱을 열 때 오늘의 미션으로 정해요.</small>
+        </span>
       </label>
-      <div className="flex gap-2">
-        <button type="button" className="btn-secondary flex-1 py-2" disabled={hub.syncing} onClick={() => requestLifeHubSync(false)}>
-          <RefreshCw className="h-4 w-4" /> {hub.syncing ? '동기화 중' : '지금 동기화'}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary flex-1 py-2"
-          onClick={() => {
-            if (!confirm('이 기기에서 Life Hub 연결을 해제할까요? 일기는 그대로 남아요.')) return
-            disconnect(browserDeps())
-            setLifeHubState({ connected: false, waiting: [] })
-          }}
-        >
-          <Unlink className="h-4 w-4" /> 연결 해제
-        </button>
-      </div>
-      {(hub.error || hub.conflicts > 0) && (
-        <p role="status" className="text-sm text-muted">{hub.error || `${hub.conflicts}개 제안은 Life Hub와 상태가 달라요. 일기 룰렛의 기록은 그대로예요.`}</p>
+      {hub.conflicts > 0 && (
+        <p role="status" className="text-sm text-muted">{`${hub.conflicts}개 제안은 Life Hub와 상태가 달라요. 일기 룰렛의 기록은 그대로예요.`}</p>
       )}
     </div>
   )

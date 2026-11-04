@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 
@@ -30,7 +31,8 @@ export default function Modal({ open, onClose, title, eyebrow, children, footer,
 
   if (!open) return null
 
-  return (
+  // body에 붙여서, 다른 모달(설정 시트) 안에서 열려도 그 위에 뜬다
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
       onClick={onClose}
@@ -61,6 +63,7 @@ export default function Modal({ open, onClose, title, eyebrow, children, footer,
         <div className="overflow-y-auto px-5 pb-5">{children}</div>
         {footer && <div className="flex gap-2 border-t border-line px-5 py-3">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
