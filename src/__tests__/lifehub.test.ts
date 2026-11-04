@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
-  LIFEHUB_ORIGIN, MISSIONS_REF_REVISION, autoApplyEnabled, beginConnect, completeConnect, decidedKeys, missionRefs,
+  LIFEHUB_ORIGIN, MISSIONS_REF_REVISION, autoApplyEnabled, beginConnect, completeConnect, decidedKeys, disconnect, isConnected, missionRefs, needsReconnect,
   parseProposal, rejectLocally, rememberReceipt, setAutoApply, stateRefs, sync, uploadRefs, type Deps, type Proposal,
 } from '../integration/lifehub'
 import { applyProposals, dayRefs, decide, readDay, type DayState } from '../integration/lifehubApply'
@@ -208,5 +208,40 @@ describe('reference lists after a 409', () => {
     expect(sent).toHaveLength(2)
     expect(sent[1]).toBeGreaterThan(sent[0])
     expect(await uploadRefs(state, d)).toEqual({ missions: false, state: false })
+  })
+})
+
+describe('reconnect needed (settings 「확인 필요」)', () => {
+  const refusing = (status: number, body: unknown = {}) =>
+    (async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/oauth/token') return new Response(JSON.stringify(body), { status })
+      return new Response('{}', { status: 401 })
+    }) as typeof fetch
+
+  it('a refused token (401/403) or an invalid_grant refresh marks reconnect; connecting again or disconnecting clears it', async () => {
+    const { f } = fakeHub([])
+    const d = await connected(f)
+    expect(needsReconnect(d)).toBe(false)
+    d.fetch = refusing(400, { error: 'invalid_grant' })
+    d.now = () => Date.parse('2027-01-01T00:00:00Z') // access token expired → refresh is refused
+    await expect(sync(stateRefs([], null), d)).rejects.toMatchObject({ kind: 'not_connected' })
+    expect(isConnected(d)).toBe(false)
+    expect(needsReconnect(d)).toBe(true)
+    disconnect(d)
+    expect(needsReconnect(d)).toBe(false)
+
+    const d2 = await connected(fakeHub([]).f)
+    d2.fetch = (async (input: string | URL | Request) =>
+      new URL(String(input)).pathname === '/oauth/token'
+        ? new Response(JSON.stringify({ access_token: 'x', refresh_token: 'rt', token_type: 'bearer', expires_in: 3600 }), { status: 200 })
+        : new Response('{}', { status: 403 })) as typeof fetch
+    await expect(sync(stateRefs([], null), d2)).rejects.toMatchObject({ kind: 'not_connected' })
+    expect(needsReconnect(d2)).toBe(true)
+    d2.fetch = fakeHub([]).f
+    const url = new URL(await beginConnect(d2))
+    await completeConnect(`?code=c&state=${url.searchParams.get('state')}`, d2)
+    expect(isConnected(d2)).toBe(true)
+    expect(needsReconnect(d2)).toBe(false)
   })
 })

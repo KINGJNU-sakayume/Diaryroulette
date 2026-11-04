@@ -1,8 +1,8 @@
 {
-  "client_id": "https://kingjnu-sakayume.github.io/Diaryroulette/lifehub-client.json",
+  "client_id": "https://kingjnu-sakayume.github.io/diaryroulette/lifehub-client.json",
   "client_name": "일기 룰렛",
-  "client_uri": "https://kingjnu-sakayume.github.io/Diaryroulette/",
-  "redirect_uris": ["https://kingjnu-sakayume.github.io/Diaryroulette/"],
+  "client_uri": "https://kingjnu-sakayume.github.io/diaryroulette/",
+  "redirect_uris": ["https://kingjnu-sakayume.github.io/diaryroulette/"],
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",

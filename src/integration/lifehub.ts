@@ -15,7 +15,7 @@ import { missions, type Mission } from '../data/missions'
 import { CATEGORIES } from '../data/categories'
 
 export const LIFEHUB_ORIGIN = 'https://life-hub-api.213303.workers.dev'
-export const APP_URL = 'https://kingjnu-sakayume.github.io/Diaryroulette/'
+export const APP_URL = 'https://kingjnu-sakayume.github.io/diaryroulette/'
 export const CLIENT_ID = APP_URL + 'lifehub-client.json'
 export const RESOURCE = LIFEHUB_ORIGIN + '/diaryroulette'
 export const SCOPE = 'diaryroulette:inbox'
@@ -87,6 +87,7 @@ export function parseProposal(item: unknown): Proposal | null {
 /* ---------- OAuth ---------- */
 
 const TOKENS_KEY = 'diaryroulette.lifehub.tokens.v1';
+const RECONNECT_KEY = 'diaryroulette.lifehub.reconnect.v1';
 const PENDING_AUTH_KEY = 'diaryroulette.lifehub.pending-auth.v1';
 const AUTH_MAX_AGE_MS = 10 * 60 * 1000;
 interface Tokens {
@@ -122,6 +123,14 @@ export function connectAvailable(loc: { origin: string; pathname: string }): boo
 export function isConnected(deps: Pick<Deps, 'storage'>): boolean {
   return typeof readJson<Tokens>(deps.storage, TOKENS_KEY)?.refresh_token === 'string';
 }
+/** Life Hub refused the stored tokens: the owner has to sign in again (settings state 「확인 필요」). */
+export function needsReconnect(deps: Pick<Deps, 'storage'>): boolean {
+  return deps.storage.getItem(RECONNECT_KEY) === '1';
+}
+function dropRejectedTokens(deps: Pick<Deps, 'storage'>): void {
+  deps.storage.removeItem(TOKENS_KEY);
+  deps.storage.setItem(RECONNECT_KEY, '1');
+}
 export function isAuthCallback(search: string): boolean {
   const q = new URLSearchParams(search);
   return q.has('state') && (q.has('code') || q.has('error'));
@@ -153,7 +162,7 @@ async function tokenRequest(deps: Deps, params: Record<string, string>): Promise
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     if (body.error === 'invalid_grant') {
-      deps.storage.removeItem(TOKENS_KEY);
+      dropRejectedTokens(deps);
       throw new LifeHubError('not_connected', 'Life Hub 연결이 만료됐어요. 다시 연결해 주세요.');
     }
     throw new LifeHubError('server', `Life Hub 인증 서버 오류 (${response.status})`);
@@ -166,6 +175,7 @@ async function tokenRequest(deps: Deps, params: Record<string, string>): Promise
     access_expires_at: deps.now() + (typeof body.expires_in === 'number' ? body.expires_in : 300) * 1000,
   };
   deps.storage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+  deps.storage.removeItem(RECONNECT_KEY);
   return tokens;
 }
 
@@ -207,7 +217,7 @@ async function api(deps: Deps, method: 'GET' | 'POST' | 'PUT', path: string, bod
   let response = await send(await accessToken(deps));
   if (response.status === 401) response = await send(await accessToken(deps, true));
   if (response.status === 401 || response.status === 403) {
-    deps.storage.removeItem(TOKENS_KEY);
+    dropRejectedTokens(deps);
     throw new LifeHubError('not_connected', 'Life Hub 연결이 더 이상 유효하지 않아요. 다시 연결해 주세요.');
   }
   return response;
@@ -216,6 +226,7 @@ async function api(deps: Deps, method: 'GET' | 'POST' | 'PUT', path: string, bod
 export function disconnect(deps: Deps): void {
   const tokens = readJson<Tokens>(deps.storage, TOKENS_KEY);
   deps.storage.removeItem(TOKENS_KEY);
+  deps.storage.removeItem(RECONNECT_KEY);
   if (tokens?.refresh_token)
     void deps
       .fetch(LIFEHUB_ORIGIN + '/oauth/token', {
